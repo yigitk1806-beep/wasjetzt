@@ -1,0 +1,41 @@
+// Datenbankschema für WasJetzt.
+//
+// Bewusst schlank: Ein Plan ist ein zusammenhängendes Dokument (Schritte,
+// Teilnehmer, Treffpunkt, Abstimmung). Es gibt keinen Anwendungsfall, in dem
+// Teilnehmer ohne ihren Plan abgefragt werden – deshalb liegen sie im
+// `payload` statt in eigenen Tabellen. Die Engine kann ihr Datenmodell so
+// weiterentwickeln, ohne dass jede Änderung eine Migration erzwingt.
+//
+// Nutzerdaten (Vorlieben, Standort, Verlauf) stehen absichtlich NICHT hier:
+// Sie bleiben im Browser des Nutzers. Es gibt kein Konto und keinen Abgleich.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Plan {
+  id        String   @id
+  shareCode String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  /// Nach diesem Zeitpunkt wird der Plan aufgeräumt.
+  expiresAt DateTime
+
+  /// Für Listen und Debugging direkt lesbar.
+  title   String
+  summary String
+  variant String
+  startAt DateTime
+  endAt   DateTime
+
+  /// Vollständiger Planzustand (siehe types/domain.ts, Typ `Plan`).
+  payload Json
+
+  @@index([expiresAt])
+  @@index([createdAt])
+}
