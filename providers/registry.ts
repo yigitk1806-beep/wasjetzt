@@ -1,4 +1,6 @@
+import { PrismaPlaceCache } from '@/db/prismaPlaceCache';
 import { FallbackPlaceProvider } from './fallbackPlaceProvider';
+import { InMemoryPlaceCache, type PlaceCacheStore } from './placeCache';
 import { MockEventProvider } from './mock/mockEventProvider';
 import { MockPlaceProvider } from './mock/mockPlaceProvider';
 import { OverpassPlaceProvider } from './osm/overpassPlaceProvider';
@@ -37,13 +39,21 @@ const globalForProviders = globalThis as unknown as {
   __wasjetztProviders?: ProviderSet;
 };
 
+/**
+ * Mit Datenbank teilen sich alle Instanzen einen Ortscache. Ohne Datenbank
+ * bleibt er im Arbeitsspeicher – lokal reicht das, serverlos nicht.
+ */
+function placeCache(): PlaceCacheStore {
+  return process.env.DATABASE_URL ? new PrismaPlaceCache() : new InMemoryPlaceCache();
+}
+
 export function getProviders(): ProviderSet {
   if (!globalForProviders.__wasjetztProviders) {
     globalForProviders.__wasjetztProviders = {
       // Echte Orte aus OpenStreetMap; die Demo-Quelle springt nur ein,
       // wenn Overpass technisch nicht erreichbar ist.
       places: new FallbackPlaceProvider(
-        new OverpassPlaceProvider(),
+        new OverpassPlaceProvider(placeCache()),
         new MockPlaceProvider(),
       ),
       events: new MockEventProvider(),

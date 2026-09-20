@@ -39,3 +39,18 @@ model Plan {
   @@index([expiresAt])
   @@index([createdAt])
 }
+
+/// Zwischenspeicher für Ortsdaten aus OpenStreetMap.
+///
+/// Liegt bewusst in der Datenbank und nicht im Arbeitsspeicher: Auf einer
+/// serverlosen Plattform hat jede Instanz ihren eigenen Speicher, ein
+/// Vorladen würde dort also nie den Klick erreichen, der darauf wartet.
+model PlaceCache {
+  /// Gerundete Koordinate der Kachel, z. B. "53.560:9.980".
+  cellKey   String   @id
+  fetchedAt DateTime @default(now())
+  /// Die fertig aufbereiteten Orte (Typ `Place[]`).
+  payload   Json
+
+  @@index([fetchedAt])
+}

@@ -1,5 +1,6 @@
 import { haversineMeters } from '@/lib/geo';
 import { profileFor } from '@/providers/activityProfiles';
+import { InMemoryPlaceCache, type PlaceCacheStore } from '@/providers/placeCache';
 import type { PlaceProvider, PlaceQuery } from '@/providers/types';
 import type { Place, PriceInfo, PriceLevel } from '@/types/domain';
 import { parseOpeningHours } from './openingHours';
@@ -74,7 +75,14 @@ export class OverpassPlaceProvider implements PlaceProvider {
   readonly id = 'overpass';
   readonly isMock = false;
 
-  private cache = new Map<string, { at: number; places: Place[] }>();
+  /**
+   * Der Cache kommt von außen, weil sein richtiger Ort von der Umgebung
+   * abhängt – Arbeitsspeicher lokal, Datenbank auf einer serverlosen
+   * Plattform. Siehe providers/placeCache.ts.
+   */
+  constructor(private readonly cache: PlaceCacheStore = new InMemoryPlaceCache()) {}
+
+  /** Nur prozesslokal: verhindert doppelte Abfragen derselben Kachel. */
   private inflight = new Map<string, Promise<Place[]>>();
 
   async search(query: PlaceQuery): Promise<Place[]> {
@@ -138,35 +146,34 @@ export class OverpassPlaceProvider implements PlaceProvider {
     }
   }
 
-  /** Lädt eine ganze Zelle und hält sie im Cache. */
+  /** Lädt eine ganze Zelle und legt sie in den Cache. */
   private load(lat: number, lon: number): Promise<Place[]> {
     const cellLat = Math.round(lat / CACHE_CELL_DEGREES) * CACHE_CELL_DEGREES;
     const cellLon = Math.round(lon / CACHE_CELL_DEGREES) * CACHE_CELL_DEGREES;
     const key = `${cellLat.toFixed(3)}:${cellLon.toFixed(3)}`;
 
-    const cached = this.cache.get(key);
-    if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
-      return Promise.resolve(cached.places);
-    }
-
-    // Parallele Anfragen auf dieselbe Zelle teilen sich einen Request.
+    // Parallele Anfragen auf dieselbe Zelle teilen sich einen Vorgang.
     const running = this.inflight.get(key);
     if (running) return running;
 
-    const request = this.fetchCell(cellLat, cellLon)
-      .then((places) => {
-        this.cache.set(key, { at: Date.now(), places });
-        return places;
-      })
-      .finally(() => {
-        this.inflight.delete(key);
-      });
+    const request = this.loadCell(key, cellLat, cellLon).finally(() => {
+      this.inflight.delete(key);
+    });
 
     this.inflight.set(key, request);
     // Wenn der Aufrufer wegen Zeitbudget aussteigt, darf die Ablehnung
     // nicht als unbehandelt im Prozess landen.
     void request.catch(() => undefined);
     return request;
+  }
+
+  private async loadCell(key: string, lat: number, lon: number): Promise<Place[]> {
+    const cached = await this.cache.get(key, CACHE_TTL_MS);
+    if (cached) return cached;
+
+    const places = await this.fetchCell(lat, lon);
+    await this.cache.set(key, places);
+    return places;
   }
 
   private async fetchCell(lat: number, lon: number): Promise<Place[]> {
