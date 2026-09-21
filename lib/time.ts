@@ -133,3 +133,27 @@ export function dayPartOf(date: Date, offsetMin: number): DayPart {
   if (h < 23) return 'evening';
   return 'night';
 }
+
+/**
+ * Bis wann ein Ort offen hat – für das Intervall, in dem `at` liegt.
+ * Minuten seit Mitternacht in Ortszeit; `null`, wenn er dann zu hat.
+ * 1440 oder mehr heißt: bis Mitternacht oder darüber hinaus.
+ */
+export function openUntil(hours: OpeningHours, at: Date, offsetMin: number): number | null {
+  const min = minutesSinceMidnight(at, offsetMin);
+  const today = weekdayOf(at, offsetMin);
+  for (const iv of hours[today] ?? []) {
+    if (min >= iv.openMin && min < iv.closeMin) return iv.closeMin;
+  }
+  const yesterday = ((today + 6) % 7) as Weekday;
+  for (const iv of hours[yesterday] ?? []) {
+    if (iv.closeMin > 1440 && min < iv.closeMin - 1440) return iv.closeMin - 1440;
+  }
+  return null;
+}
+
+/** 1080 → "18:00". Werte über Mitternacht werden zurückgerechnet. */
+export function clockFromMinutes(min: number): string {
+  const m = ((Math.round(min) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}

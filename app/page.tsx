@@ -8,6 +8,7 @@ import { TopBar } from '@/components/TopBar';
 import { PlanningOverlay } from '@/components/PlanningOverlay';
 import { ActionCard } from '@/components/home/ActionCard';
 import { CategoryTiles } from '@/components/home/CategoryTiles';
+import { DiscoverCard } from '@/components/home/DiscoverCard';
 import { DealsStrip } from '@/components/home/DealsStrip';
 import { LocationSheet } from '@/components/location/LocationSheet';
 import { useLocale } from '@/components/LocaleProvider';
@@ -143,6 +144,7 @@ export default function HomePage() {
             disabled={disabled}
             onClick={() => void go({ surprise: true })}
           />
+          <DiscoverCard delay={0.26} onClick={() => router.push('/entdecken')} />
         </div>
 
         {error ? (

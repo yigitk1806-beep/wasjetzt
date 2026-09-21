@@ -26,6 +26,8 @@ export type PlanContext = {
   budgetCap?: number;
   /** Nur bei Touren: Sehenswürdigkeiten, getrennt von den Ausgehorten. */
   sights?: Place[];
+  /** Die Sehenswürdigkeiten konnten gerade nicht geladen werden. */
+  sightsUnavailable?: boolean;
   /**
    * Versatz der Ortszeit gegenüber UTC in Minuten. Jede Frage nach Uhrzeit
    * oder Wochentag geht über diesen Wert – nie über die Uhr des Servers.

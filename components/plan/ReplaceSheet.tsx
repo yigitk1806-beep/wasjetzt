@@ -59,13 +59,17 @@ type Props = {
   onClose: () => void;
   onReplace: (hint: string) => Promise<void>;
   error?: string | null;
+  /** Eigene Auswahl, etwa für Touren. Ohne Angabe gelten die Plan-Optionen. */
+  options?: ReplaceOption[];
+  /** Satz unter dem Titel. */
+  note?: string;
 };
 
 /** Anpassungen erscheinen nur, wenn sie zum konkreten Schritt passen. */
-export function ReplaceSheet({ step, onClose, onReplace, error }: Props) {
+export function ReplaceSheet({ step, onClose, onReplace, error, options: eigene, note }: Props) {
   const [busyHint, setBusyHint] = useState<string | null>(null);
 
-  const options = step ? OPTIONS.filter((option) => option.relevant(step)) : [];
+  const options = step ? (eigene ?? OPTIONS).filter((option) => option.relevant(step)) : [];
 
   return (
     <Sheet
@@ -76,7 +80,7 @@ export function ReplaceSheet({ step, onClose, onReplace, error }: Props) {
       title={step ? `${step.place.emoji} ${step.place.name} ersetzen` : undefined}
     >
       <p className="mb-4 text-[0.88rem] text-ink-muted">
-        Der Rest des Plans bleibt so, wie er ist.
+        {note ?? 'Der Rest des Plans bleibt so, wie er ist.'}
       </p>
 
       <div className="flex flex-wrap gap-2">

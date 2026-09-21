@@ -91,8 +91,17 @@ export async function createPlanContext(
     providers.weather.forecast(request.origin, 24),
     isTour
       ? providers.places
-          .search({ center: request.origin, radiusMeters, theme: 'sights', limit: 500 })
-          .catch(() => [] as Place[])
+          .search({
+            center: request.origin,
+            radiusMeters,
+            theme: 'sights',
+            limit: 500,
+            // Bei einer Tour wartet der Nutzer mit sichtbarem Fortschritt –
+            // lieber etwas länger als erfundene Sehenswürdigkeiten.
+            maxWaitMs: 22_000,
+            noFallback: true,
+          })
+          .catch(() => null)
       : Promise.resolve(undefined),
   ]);
 
@@ -116,7 +125,8 @@ export async function createPlanContext(
     latestEnd,
     radiusMeters,
     budgetCap: request.budgetPerPerson ?? BUDGET_CAPS[request.budget],
-    sights,
+    sights: sights ?? undefined,
+    sightsUnavailable: isTour && sights === null,
     tzOffsetMin,
   };
 }
@@ -331,10 +341,16 @@ export function roundToFive(date: Date): Date {
 
 function buildNotes(ctx: PlanContext, steps: PlanStep[], dropped: number): PlanNote[] {
   const notes: PlanNote[] = [];
-  const mode = weatherModeOf(ctx.weather.now);
+  // Maßgeblich ist das Wetter während des Plans, nicht das beim Erstellen.
+  const nassZu = (s: PlanStep) => weatherModeOf(weatherAt(ctx.weather, s.startISO)) === 'wet';
+  const mode = steps.length
+    ? steps.some(nassZu)
+      ? 'wet'
+      : 'dry'
+    : weatherModeOf(ctx.weather.now);
 
   if (mode === 'wet') {
-    const outdoor = steps.filter((s) => s.place.indoorOutdoor === 'outdoor').length;
+    const outdoor = steps.filter((s) => s.place.indoorOutdoor === 'outdoor' && nassZu(s)).length;
     notes.push({
       kind: 'weather',
       text:

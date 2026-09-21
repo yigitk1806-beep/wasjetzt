@@ -149,6 +149,17 @@ export type Place = {
   themes?: SightTheme[];
   /** Mit Wikipedia/Wikidata verknüpft – echtes Bekanntheitssignal aus OSM. */
   notable?: boolean;
+  /**
+   * Verknüpfter Wikipedia-Artikel aus OSM, z. B. "de:Brandenburger Tor".
+   * Quelle für Vorschaubild und Kurzbeschreibung in der Tour-Ansicht.
+   */
+  wikipedia?: string;
+  /**
+   * Wie bekannt ein Ort über die Stadt hinaus ist, 0–1. Abgeleitet aus der
+   * Zahl der Sprachen, in denen OSM-Mitwirkende seinen Namen eingetragen
+   * haben – das Brandenburger Tor hat Dutzende, ein Kiezpark keine.
+   */
+  prominence?: number;
   /** Mindestalter, falls relevant (z. B. Bar/Club). */
   minAge?: number;
   bookable?: boolean;

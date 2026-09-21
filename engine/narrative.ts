@@ -127,5 +127,13 @@ export function tourSummary(steps: PlanStep[]): string {
   const km = (meter / 1000).toLocaleString('de', { maximumFractionDigits: 1 });
   const geschaetzt = steps.some((s) => s.travelFromPrevious.estimated);
   const wort = stationen === 1 ? 'Station' : 'Stationen';
-  return `${stationen} ${wort} · ${geschaetzt ? 'ca. ' : ''}${km} km`;
+  const unterwegs = UNTERWEGS[steps[0]?.travelFromPrevious.mode ?? 'walk'];
+  return `${stationen} ${wort} · ${geschaetzt ? 'ca. ' : ''}${km} km ${unterwegs}`;
 }
+
+const UNTERWEGS: Record<PlanStep['travelFromPrevious']['mode'], string> = {
+  walk: 'zu Fuß',
+  bike: 'mit dem Rad',
+  transit: 'mit Bus & Bahn',
+  car: 'mit dem Auto',
+};

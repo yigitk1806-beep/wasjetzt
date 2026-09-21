@@ -22,10 +22,10 @@ export class MockPlaceProvider implements PlaceProvider {
   private cache = new Map<string, Place[]>();
 
   async search(query: PlaceQuery): Promise<Place[]> {
-    const generated = this.generateAround(query.center.lat, query.center.lon);
-    // Im Ausfallfall liefert auch die Tourplanung etwas – aus den Demo-Orten,
-    // die sich als Besichtigungsziel eignen. Gekennzeichnet bleibt es trotzdem.
-    const all = query.theme === 'sights' ? generated.flatMap(asDemoSight) : generated;
+    // Sehenswürdigkeiten gibt es aus der Demo-Quelle bewusst nicht: Eine
+    // erfundene Tourstation wäre irreführender als keine Tour.
+    if (query.theme === 'sights') return [];
+    const all = this.generateAround(query.center.lat, query.center.lon);
     const filtered = all.filter((place) => {
       if (query.categories?.length && !query.categories.includes(place.category)) {
         return false;
@@ -150,17 +150,4 @@ export class MockPlaceProvider implements PlaceProvider {
         : undefined,
     };
   }
-}
-
-/** Ordnet einem Demo-Ort Besichtigungsthemen zu – nur für den Ausfallfall. */
-function asDemoSight(place: Place): Place[] {
-  const themes: Record<string, NonNullable<Place['themes']>> = {
-    Museum: ['museum', 'history', 'classic'],
-    Bühne: ['history', 'classic'],
-    Aussichtspunkt: ['photo', 'park', 'hidden'],
-    Park: ['park', 'hidden'],
-    Galerie: ['museum', 'hidden'],
-  };
-  const passend = themes[place.kind];
-  return passend ? [{ ...place, themes: passend, notable: passend.includes('classic') }] : [];
 }

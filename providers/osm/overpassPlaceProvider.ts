@@ -52,7 +52,7 @@ const SIGHTS_RADIUS_M = 2500;
 const SIGHTS_LIMIT = 500;
 
 /** Erhöhen, sobald sich ändert, welche Orte wie eingeordnet werden. */
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v4';
 
 /** Zellgröße des Caches (~2,2 km). Kleine Ortswechsel treffen denselben Cache. */
 const CACHE_CELL_DEGREES = 0.02;
@@ -114,7 +114,7 @@ export class OverpassPlaceProvider implements PlaceProvider {
     const places = await this.loadWithinBudget(
       query.center.lat,
       query.center.lon,
-      INTERACTIVE_BUDGET_MS,
+      query.maxWaitMs ?? INTERACTIVE_BUDGET_MS,
       query.theme ?? 'places',
     );
 
@@ -224,7 +224,12 @@ export class OverpassPlaceProvider implements PlaceProvider {
     const toModel = theme === 'sights' ? toSight : toPlace;
     let lastError: unknown = null;
 
-    for (const [index, endpoint] of ENDPOINTS.entries()) {
+    // Der Hauptserver wird bei Überlast (429/504) ein zweites Mal versucht,
+    // bevor die Ausweichserver dran sind. Pro Nutzer sind dort nur zwei
+    // gleichzeitige Abfragen erlaubt – eine kurze Pause reicht oft.
+    const versuche = [ENDPOINTS[0], ENDPOINTS[0], ...ENDPOINTS.slice(1)];
+    for (const [index, endpoint] of versuche.entries()) {
+      if (index === 1) await new Promise((r) => setTimeout(r, 1500));
       try {
         const res = await fetch(endpoint, {
           method: 'POST',
@@ -234,12 +239,17 @@ export class OverpassPlaceProvider implements PlaceProvider {
             'User-Agent': 'WasJetzt/0.1 (Freizeitplaner; +https://wasjetzt.app)',
           },
           body: `data=${encodeURIComponent(query)}`,
-          signal: AbortSignal.timeout(
-            index === 0 ? PRIMARY_TIMEOUT_MS : MIRROR_TIMEOUT_MS,
-          ),
+          signal: AbortSignal.timeout(index <= 1 ? PRIMARY_TIMEOUT_MS : MIRROR_TIMEOUT_MS),
         });
 
-        if (!res.ok) throw new Error(`${endpoint} → ${res.status}`);
+        if (!res.ok) {
+          // Nur Überlast ist einen zweiten Versuch am selben Server wert.
+          if (index === 0 && res.status !== 429 && res.status !== 504) {
+            lastError = new Error(`${endpoint} → ${res.status}`);
+            continue;
+          }
+          throw new Error(`${endpoint} → ${res.status}`);
+        }
 
         const json = (await res.json()) as OverpassResponse;
         const places = (json.elements ?? [])
@@ -358,7 +368,29 @@ function toSight(element: OverpassElement): Place | null {
     source: 'openstreetmap',
     themes: themesFor(key, tags),
     notable,
+    wikipedia: wikipediaOf(tags),
+    prominence: prominenceOf(tags),
   };
+}
+
+/**
+ * Bekanntheit aus echten Daten: In wie vielen Sprachen gibt es einen Namen
+ * oder Wikipedia-Artikel? Weltbekannte Orte haben Dutzende, lokale kaum welche.
+ */
+function prominenceOf(tags: OsmTags): number {
+  let sprachen = 0;
+  for (const key of Object.keys(tags)) {
+    if (/^(name|wikipedia):[a-z]{2,3}(-[A-Za-z]+)?$/.test(key)) sprachen += 1;
+  }
+  return Math.min(1, sprachen / 25);
+}
+
+/** "de:Brandenburger Tor" – bevorzugt der Haupteintrag, sonst ein Sprach-Tag. */
+function wikipediaOf(tags: OsmTags): string | undefined {
+  if (tags.wikipedia?.includes(':')) return tags.wikipedia;
+  if (tags['wikipedia:de']) return `de:${tags['wikipedia:de']}`;
+  const sprach = Object.keys(tags).find((k) => k.startsWith('wikipedia:'));
+  return sprach ? `${sprach.slice('wikipedia:'.length)}:${tags[sprach]}` : undefined;
 }
 
 /** Preis: echter Betrag nur, wenn OSM ihn wirklich angibt. */

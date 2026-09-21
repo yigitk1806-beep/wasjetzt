@@ -1,6 +1,6 @@
 import { estimateTravelMinutes, haversineMeters } from '@/lib/geo';
 import { shortId } from '@/lib/id';
-import { isOpenDuring, localHour } from '@/lib/time';
+import { formatClock, isOpenDuring, localHour } from '@/lib/time';
 import type { Coordinates, Place, Plan, PlanStep, SightTheme } from '@/types/domain';
 import { assemblePlan, roundToFive, weatherAt } from './planBuilder';
 import type { PlanContext } from './types';
@@ -100,9 +100,12 @@ function candidatePool(ctx: PlanContext, settings: TourSettings): Place[] {
   const ausgeschlossen = new Set(ctx.request.excludePlaceIds ?? []);
   const byId = new Map<string, Place>();
 
-  for (const sight of ctx.sights ?? []) byId.set(sight.id, sight);
+  for (const sight of ctx.sights ?? []) {
+    if (sight.source !== 'mock') byId.set(sight.id, sight);
+  }
 
   for (const place of ctx.pool) {
+    if (place.source === 'mock') continue;
     if (place.notable !== false) continue;
     const themes = GEHEIMTIPP_ARTEN[place.kind];
     if (!themes || byId.has(place.id)) continue;
@@ -139,9 +142,26 @@ function interestScore(place: Place, settings: TourSettings): number {
 
   for (const theme of themes) score += settings.boost[theme] ?? 0;
 
-  if (settings.surprise) score += place.scores.novelty * 0.7;
+  // Wahrzeichen: die bekanntesten Orte zuerst. Ein Kiezpark mit
+  // Wikipedia-Artikel ist noch kein Wahrzeichen.
+  const bekanntheit = place.prominence ?? 0;
+  if (wantsClassic) {
+    score += bekanntheit * 1.8;
+    if (NEBENZIELE.has(place.kind) && bekanntheit < 0.4) score -= 0.7;
+  }
+
+  if (settings.surprise) score += place.scores.novelty * 0.5 + bekanntheit * 0.6;
 
   return score;
+}
+
+/** Schön, aber selten der Grund für eine Stadttour. */
+const NEBENZIELE = new Set(['Park', 'Garten', 'Brücke', 'Brunnen', 'Kunstwerk']);
+
+/** Zehnmal dieselbe Art hintereinander ist keine Tour, sondern eine Liste. */
+function wiederholung(place: Place, kinds: Map<string, number>): number {
+  const schon = kinds.get(place.kind) ?? 0;
+  return schon * (place.kind === 'Museum' || place.kind === 'Galerie' ? 0.15 : 0.45);
 }
 
 type Pick = { step: PlanStep; score: number; location: Coordinates };
@@ -157,7 +177,39 @@ type PickOptions = {
   /** Nur für "Überrasch mich": leichtes Zufallsrauschen pro Tour. */
   jitter: Map<string, number>;
   onlyIndoor?: boolean;
+  /** Wie oft jede Art schon vorkommt – für Abwechslung. */
+  kinds?: Map<string, number>;
+  /** Beim Ersetzen: Die nächste Station soll gut erreichbar bleiben. */
+  towards?: Coordinates;
+  /** Bereits vergebene Begründungen – derselbe Satz nicht zweimal. */
+  usedReasons?: Set<string>;
+  /** Schon eingeplante Orte – derselbe Ort zählt nicht zweimal. */
+  besucht?: Place[];
 };
+
+/** Wörter, die allein nichts über die Identität eines Ortes sagen. */
+const ALLGEMEIN = new Set([
+  'der', 'die', 'das', 'the', 'st.', 'sankt', 'neue', 'neues', 'neuer', 'alte', 'altes', 'alter',
+  'große', 'großer', 'großes', 'kleine', 'kleiner', 'denkmal', 'museum', 'kirche', 'park', 'garten',
+  'brücke', 'haus', 'platz', 'statue', 'monument', 'gedenkstätte', 'gedenkort', 'berliner',
+]);
+
+/**
+ * Zwei OSM-Einträge für denselben Ort – etwa „Reichstagsgebäude" und
+ * „Reichstagskuppel". In OSM sind das getrennte Objekte, für eine Tour ist es
+ * ein Halt.
+ */
+function gleicherOrt(a: Place, b: Place): boolean {
+  const d = haversineMeters(a.location, b.location);
+  if (d < 20) return true;
+  if (d > 150) return false;
+  const wa = a.name.toLowerCase().split(/\s+/)[0] ?? '';
+  const wb = b.name.toLowerCase().split(/\s+/)[0] ?? '';
+  if (ALLGEMEIN.has(wa) || ALLGEMEIN.has(wb)) return false;
+  let gemeinsam = 0;
+  while (gemeinsam < wa.length && wa[gemeinsam] === wb[gemeinsam]) gemeinsam += 1;
+  return gemeinsam >= 6;
+}
 
 /** Wählt die nächste Station: viel Wert, wenig Umweg, zur Zeit offen. */
 function pickNextSight(options: PickOptions): Pick | null {
@@ -168,6 +220,7 @@ function pickNextSight(options: PickOptions): Pick | null {
   for (const place of candidates) {
     if (used.has(place.id)) continue;
     if (options.onlyIndoor && place.indoorOutdoor === 'outdoor') continue;
+    if (options.besucht?.some((b) => gleicherOrt(b, place))) continue;
 
     const base = interestScore(place, settings);
     if (!Number.isFinite(base)) continue;
@@ -197,10 +250,19 @@ function pickNextSight(options: PickOptions): Pick | null {
     // Draußen braucht es Tageslicht, um etwas zu sehen.
     if (place.indoorOutdoor === 'outdoor' && sunset && leave > sunset) continue;
 
-    const umweg = (travelMin / 10) * 0.5 * settings.distanceWeight;
-    const unbekannt = place.openingHours ? 0 : 0.4;
+    const weiterweg = options.towards
+      ? estimateTravelMinutes(haversineMeters(place.location, options.towards), ctx.request.mobility)
+      : 0;
+    const umweg = ((travelMin + weiterweg) / 10) * 0.5 * settings.distanceWeight;
+    const unbekannt = place.openingHours || place.category === 'nature' ? 0 : 0.4;
     const score =
-      base + weatherFit(place, weather) * 0.6 - umweg - unbekannt + (options.jitter.get(place.id) ?? 0);
+      base +
+      weatherFit(place, weather) * 0.6 +
+      wetterAusgleich(place, weather) -
+      umweg -
+      unbekannt -
+      wiederholung(place, options.kinds ?? new Map()) +
+      (options.jitter.get(place.id) ?? 0);
 
     if (!best || score > best.score) {
       best = {
@@ -220,12 +282,20 @@ function pickNextSight(options: PickOptions): Pick | null {
           },
           price: { ...place.price },
           openingHoursKnown: place.openingHours !== null,
-          reason: tourReason(place, weather),
+          reason: '',
         },
       };
     }
   }
 
+  if (best) {
+    best.step.reason = tourReason(
+      best.step.place,
+      weatherAt(ctx.weather, best.step.startISO),
+      best.step.travelFromPrevious.durationMin,
+      options.usedReasons ?? new Set(),
+    );
+  }
   return best;
 }
 
@@ -244,6 +314,8 @@ function pickBreak(
 
   for (const place of ctx.pool) {
     if (used.has(place.id)) continue;
+    // Auch eine Kaffeepause kommt nie aus den Demo-Daten.
+    if (place.source === 'mock') continue;
     if (!wanted.includes(place.category)) continue;
 
     const distanceMeters = haversineMeters(from, place.location);
@@ -290,14 +362,53 @@ function pickBreak(
   return best;
 }
 
-function tourReason(place: Place, weather: ReturnType<typeof weatherAt>): string {
+/**
+ * Bei Regen keine Tour aus lauter Denkmälern unter freiem Himmel, wenn es
+ * Museen und Kirchen in der Nähe gibt – bei Sonne umgekehrt. Stark genug,
+ * um die Reihenfolge zu drehen, aber kein Verbot: Gibt es nichts Überdachtes,
+ * bleibt der Ort im Rennen.
+ */
+function wetterAusgleich(place: Place, weather: ReturnType<typeof weatherAt>): number {
+  const mode = weatherModeOf(weather);
+  const draussen = place.indoorOutdoor === 'outdoor';
+  const drinnen = place.indoorOutdoor === 'indoor';
+  if (mode === 'wet') return draussen ? -1.1 : drinnen ? 0.5 : 0;
+  if (mode === 'cold') return draussen ? -0.4 : 0.2;
+  if (mode === 'pleasant') return draussen ? 0.45 : 0;
+  return 0;
+}
+
+/**
+ * Ein Satz, warum die Station dabei ist. Der erste passende, der in dieser
+ * Tour noch nicht vorkam – achtmal „Ein Klassiker der Stadt." sagt nichts.
+ */
+function tourReason(
+  place: Place,
+  weather: ReturnType<typeof weatherAt>,
+  travelMin: number,
+  usedReasons: Set<string>,
+): string {
   const themes = place.themes ?? [];
   const mode = weatherModeOf(weather);
-  if (mode === 'wet' && place.indoorOutdoor === 'indoor') return 'Drinnen – passt zum Regen.';
-  if (place.notable) return 'Ein Klassiker der Stadt.';
-  if (themes.includes('hidden')) return 'Ein Geheimtipp abseits der großen Ziele.';
-  if (themes.includes('photo') && mode === 'pleasant') return 'Gutes Licht für Fotos.';
-  if (themes.includes('park')) return 'Zum Durchatmen zwischendurch.';
+  const bekanntheit = place.prominence ?? 0;
+  const kandidaten: Array<string | false | undefined> = [
+    mode === 'wet' && place.indoorOutdoor === 'indoor' && 'Drinnen – passt zum Regen.',
+    bekanntheit >= 0.6 && 'Einer der bekanntesten Orte der Stadt.',
+    place.notable && bekanntheit >= 0.25 && 'Ein Klassiker der Stadt.',
+    themes.includes('hidden') && 'Ein Geheimtipp abseits der großen Ziele.',
+    place.kind === 'Gedenkort' && 'Ein Ort zum Innehalten.',
+    (place.kind === 'Museum' || place.kind === 'Galerie') && 'Drinnen gibt es viel zu entdecken.',
+    themes.includes('photo') && mode === 'pleasant' && 'Gutes Licht für Fotos.',
+    themes.includes('park') && 'Zum Durchatmen zwischendurch.',
+    travelMin <= 5 && 'Nur ein paar Schritte weiter.',
+    place.notable && 'Bekannt in der Stadt – und gut erreichbar.',
+  ];
+  for (const satz of kandidaten) {
+    if (satz && !usedReasons.has(satz)) {
+      usedReasons.add(satz);
+      return satz;
+    }
+  }
   return 'Liegt gut auf dem Weg.';
 }
 
@@ -310,10 +421,44 @@ export function buildTour(ctx: PlanContext): Plan | null {
   let result = routeTour(ctx, settings);
   let erweitert = false;
 
+  // Früh am Morgen hat fast nichts offen. Statt einer leeren Tour beginnt
+  // sie später – stundenweise, solange das Zeitbudget es hergibt.
+  let tourCtx = ctx;
+  let verschobenUm = 0;
+  while (sightCount(result) < 2 && verschobenUm < 4) {
+    verschobenUm += 1;
+    const start = new Date(ctx.start.getTime() + verschobenUm * 60 * 60_000);
+    if (start >= ctx.latestEnd) break;
+    tourCtx = { ...ctx, start };
+    result = routeTour(tourCtx, settings);
+  }
+
+  // Regen am Anfang und fast alles draußen? Wenn später Museen, Kirchen und
+  // Ähnliches offen haben, beginnt die Tour lieber dann – in voller Länge.
+  let wegenRegen = false;
+  if (nassDraussen(tourCtx, result)) {
+    for (let stunden = 1; stunden <= 3; stunden += 1) {
+      const versatz = stunden * 60 * 60_000;
+      const start = new Date(tourCtx.start.getTime() + versatz);
+      const latestEnd = ctx.request.mustBeHomeByISO
+        ? ctx.latestEnd
+        : new Date(tourCtx.latestEnd.getTime() + versatz);
+      if (latestEnd.getTime() - start.getTime() < 90 * 60_000) break;
+      const spaeterCtx = { ...ctx, start, latestEnd };
+      const spaeter = routeTour(spaeterCtx, settings);
+      if (sightCount(spaeter) >= 3 && !nassDraussen(spaeterCtx, spaeter)) {
+        result = spaeter;
+        tourCtx = spaeterCtx;
+        wegenRegen = true;
+        break;
+      }
+    }
+  }
+
   // Zur Auswahl gab es zu wenig? Dann um weitere Sehenswürdigkeiten ergänzen,
   // statt eine Zwei-Stationen-Tour auszugeben – und das offen sagen.
   if (sightCount(result) < 3 && settings.interests.size > 0) {
-    const weiter = routeTour(ctx, { ...settings, interests: new Set(), surprise: false });
+    const weiter = routeTour(tourCtx, { ...settings, interests: new Set(), surprise: false });
     if (sightCount(weiter) > sightCount(result)) {
       result = weiter;
       erweitert = true;
@@ -323,6 +468,21 @@ export function buildTour(ctx: PlanContext): Plan | null {
   if (sightCount(result) < 2) return null;
 
   const plan = assemblePlan(ctx, result, 'balanced', 0);
+  if (wegenRegen) {
+    plan.notes.unshift({
+      kind: 'weather',
+      text: `Anfangs regnet es – die Tour beginnt deshalb um ${formatClock(
+        tourCtx.start.toISOString(),
+        'de',
+        ctx.tzOffsetMin,
+      )}, wenn mehr drinnen offen hat.`,
+    });
+  } else if (verschobenUm > 0) {
+    plan.notes.unshift({
+      kind: 'time',
+      text: `Um diese Uhrzeit hat noch kaum etwas geöffnet – die Tour beginnt deshalb später.`,
+    });
+  }
   if (erweitert) {
     plan.notes.unshift({
       kind: 'info',
@@ -334,6 +494,18 @@ export function buildTour(ctx: PlanContext): Plan | null {
 
 function sightCount(steps: PlanStep[]): number {
   return steps.filter((s) => s.place.themes?.length).length;
+}
+
+/** Findet die Tour überwiegend draußen im Regen statt? */
+function nassDraussen(ctx: PlanContext, steps: PlanStep[]): boolean {
+  const stationen = steps.filter((s) => s.place.themes?.length);
+  if (stationen.length === 0) return false;
+  const nass = stationen.filter(
+    (s) =>
+      s.place.indoorOutdoor === 'outdoor' &&
+      weatherModeOf(weatherAt(ctx.weather, s.startISO)) === 'wet',
+  ).length;
+  return nass / stationen.length >= 0.5;
 }
 
 function routeTour(ctx: PlanContext, settings: TourSettings): PlanStep[] {
@@ -349,6 +521,8 @@ function routeTour(ctx: PlanContext, settings: TourSettings): PlanStep[] {
 
   const steps: PlanStep[] = [];
   const used = new Set<string>();
+  const kinds = new Map<string, number>();
+  const usedReasons = new Set<string>();
   let cursor = new Date(ctx.start);
   let from: Coordinates = ctx.request.origin;
   let lastBreak = new Date(ctx.start);
@@ -370,11 +544,24 @@ function routeTour(ctx: PlanContext, settings: TourSettings): PlanStep[] {
       }
     }
 
-    const next = pickNextSight({ ctx, settings, candidates, used, cursor, from, tourEnd, jitter });
+    const next = pickNextSight({
+      ctx,
+      settings,
+      candidates,
+      used,
+      cursor,
+      from,
+      tourEnd,
+      jitter,
+      kinds,
+      usedReasons,
+      besucht: steps.map((s) => s.place),
+    });
     if (!next) break;
 
     steps.push(next.step);
     used.add(next.step.place.id);
+    kinds.set(next.step.place.kind, (kinds.get(next.step.place.kind) ?? 0) + 1);
     cursor = new Date(next.step.endISO);
     from = next.location;
   }
@@ -409,6 +596,12 @@ export function replaceTourStop(
 
   const alt = plan.steps[index];
   const istPause = !alt.place.themes?.length;
+  const danach = plan.steps[index + 1]?.place.location;
+  const kinds = new Map<string, number>();
+  for (const s of plan.steps) {
+    if (s.id !== stepId) kinds.set(s.place.kind, (kinds.get(s.place.kind) ?? 0) + 1);
+  }
+  const usedReasons = new Set(plan.steps.filter((s) => s.id !== stepId).map((s) => s.reason));
 
   const picked = istPause
     ? pickBreak(ctx, from, cursor, used, tourEnd)
@@ -422,6 +615,10 @@ export function replaceTourStop(
         tourEnd,
         jitter: new Map(),
         onlyIndoor: hint === 'indoor',
+        kinds,
+        towards: danach,
+        usedReasons,
+        besucht: plan.steps.filter((s) => s.id !== stepId).map((s) => s.place),
       });
   if (!picked) return null;
 

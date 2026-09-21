@@ -23,6 +23,13 @@ export type PlaceQuery = {
    * eigener Cache, damit sich beides nicht die Plätze im Ergebnis streitig macht.
    */
   theme?: 'sights';
+  /** Wie lange höchstens auf die echte Quelle gewartet wird. */
+  maxWaitMs?: number;
+  /**
+   * Nie auf Demo-Daten ausweichen. Für Touren: Eine erfundene
+   * Sehenswürdigkeit ist schlimmer als die ehrliche Auskunft „gerade nicht".
+   */
+  noFallback?: boolean;
   categories?: Category[];
   /** ISO-Zeitpunkt, zu dem der Ort geöffnet sein sollte (nur Vorfilter). */
   openAtISO?: string;

@@ -157,9 +157,11 @@ async function runPipeline(
         ok: false,
         status: 200,
         error: 'no-plan',
-        message: isTour
-          ? 'Hier finde ich gerade zu wenige offene Sehenswürdigkeiten für eine Tour.'
-          : 'Dafür finde ich gerade nichts Passendes.',
+        message: !isTour
+          ? 'Dafür finde ich gerade nichts Passendes.'
+          : ctx.sightsUnavailable
+            ? 'Die Sehenswürdigkeiten konnten gerade nicht geladen werden. Versuch es in ein paar Sekunden nochmal.'
+            : 'Hier finde ich gerade zu wenige offene Sehenswürdigkeiten für eine Tour.',
         understood,
       };
     }

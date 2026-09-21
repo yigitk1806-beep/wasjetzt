@@ -121,3 +121,120 @@ export function Sparkle(props: IconProps) {
     </Icon>
   );
 }
+
+export function Landmark(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M10 18v-7" />
+      <path d="M11.12 2.198a2 2 0 0 1 1.76.006l7.866 3.847c.476.233.31.949-.22.949H3.474c-.53 0-.695-.716-.22-.949z" />
+      <path d="M14 18v-7" />
+      <path d="M18 18v-7" />
+      <path d="M3 22h18" />
+      <path d="M6 18v-7" />
+    </Icon>
+  );
+}
+
+export function Palette(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z" />
+      <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+      <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+      <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+      <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+    </Icon>
+  );
+}
+
+export function Trees(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M10 10v.2A3 3 0 0 1 8.9 16H5a3 3 0 0 1-1-5.8V10a3 3 0 0 1 6 0Z" />
+      <path d="M7 16v6" />
+      <path d="M13 19v3" />
+      <path d="M12 19h8.3a1 1 0 0 0 .7-1.7L18 14h.3a1 1 0 0 0 .7-1.7L16 9h.2a1 1 0 0 0 .8-1.7L13 3l-1.4 1.5" />
+    </Icon>
+  );
+}
+
+export function Camera(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+      <circle cx="12" cy="13" r="3" />
+    </Icon>
+  );
+}
+
+export function Clock(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </Icon>
+  );
+}
+
+export function Footprints(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z" />
+      <path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z" />
+      <path d="M16 17h4" />
+      <path d="M4 13h4" />
+    </Icon>
+  );
+}
+
+export function Navigation(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <polygon points="3 11 22 2 13 21 11 13 3 11" />
+    </Icon>
+  );
+}
+
+export function Refresh(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+      <path d="M8 16H3v5" />
+    </Icon>
+  );
+}
+
+export function Coffee(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M10 2v2" />
+      <path d="M14 2v2" />
+      <path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1" />
+      <path d="M6 2v2" />
+    </Icon>
+  );
+}
+
+export function DoorOpen(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M13 4h3a2 2 0 0 1 2 2v14" />
+      <path d="M2 20h3" />
+      <path d="M13 20h9" />
+      <path d="M10 12v.01" />
+      <path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z" />
+    </Icon>
+  );
+}
+
+export function Share(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+      <path d="m16 6-4-4-4 4" />
+      <path d="M12 2v13" />
+    </Icon>
+  );
+}

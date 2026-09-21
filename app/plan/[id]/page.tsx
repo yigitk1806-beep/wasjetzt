@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getPlanStore } from '@/db/planStore';
 import { PlanView } from '@/components/plan/PlanView';
+import { TourView } from '@/components/tour/TourView';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,8 @@ export default async function PlanPage({
 
   if (!plan) return <PlanNotFound />;
 
-  return <PlanView initialPlan={plan} />;
+  // Touren haben eine eigene Ansicht: Stationen mit Bild statt Zeitstrahl.
+  return plan.mode === 'tour' ? <TourView initialPlan={plan} /> : <PlanView initialPlan={plan} />;
 }
 
 /** Abgelaufene oder unbekannte Links landen hier – ohne Sackgasse. */

@@ -26,6 +26,7 @@ export class FallbackPlaceProvider implements PlaceProvider {
     try {
       return await this.primary.search(query);
     } catch (error) {
+      if (query.noFallback) throw error;
       console.warn(
         `[places] ${this.primary.id} nicht verfügbar, nutze ${this.fallback.id}`,
         error,
