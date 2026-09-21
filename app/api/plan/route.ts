@@ -156,7 +156,8 @@ async function runPipeline(
       return {
         ok: false,
         status: 200,
-        error: 'no-plan',
+        // Eigener Code, damit die Oberfläche es einmal still neu versuchen kann.
+        error: isTour && ctx.sightsUnavailable ? 'sights-unavailable' : 'no-plan',
         message: !isTour
           ? 'Dafür finde ich gerade nichts Passendes.'
           : ctx.sightsUnavailable

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { PlanningOverlay } from '@/components/PlanningOverlay';
@@ -84,22 +84,18 @@ export default function EntdeckenPage() {
   const [phase, setPhase] = useState<PlanPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const vorladen = useRef<Promise<unknown> | null>(null);
 
   // Sehenswürdigkeiten schon laden, während die Auswahl gelesen wird.
   useEffect(() => {
     if (!location) return;
-    const body = (theme?: string) =>
-      JSON.stringify({ ...location.location, ...(theme ? { theme } : {}) });
-    void fetch('/api/prefetch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: body('sights'),
-    }).catch(() => undefined);
-    void fetch('/api/prefetch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: body(),
-    }).catch(() => undefined);
+    const laden = (theme?: string) =>
+      fetch('/api/prefetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...location.location, ...(theme ? { theme } : {}) }),
+      }).catch(() => undefined);
+    vorladen.current = Promise.all([laden('sights'), laden()]);
   }, [location?.location.lat, location?.location.lon]);
 
   async function tour(auswahl: Auswahl) {
@@ -108,22 +104,41 @@ export default function EntdeckenPage() {
       return;
     }
     setBusy(auswahl.key);
-    setPhase(null);
+    setPhase('orte');
     setError(null);
+    const beginn = Date.now();
 
-    const response = await requestPlanStreamed(
-      {
-        lat: location.location.lat,
-        lon: location.location.lon,
-        originLabel: location.label,
-        startISO: new Date().toISOString(),
-        availableMinutes: minutes,
-        mode: 'tour',
-        mobility: 'walk',
-        interests: auswahl.interests,
-      },
-      setPhase,
-    );
+    // Läuft das Vorladen noch, wird darauf gewartet statt eine zweite,
+    // gleichzeitige Abfrage zu starten – die öffentlichen OSM-Server
+    // erlauben pro Absender nur wenige gleichzeitig.
+    if (vorladen.current) {
+      await Promise.race([vorladen.current, new Promise((r) => setTimeout(r, 25_000))]);
+    }
+
+    const anfrage = () =>
+      requestPlanStreamed(
+        {
+          lat: location.location.lat,
+          lon: location.location.lon,
+          originLabel: location.label,
+          startISO: new Date().toISOString(),
+          availableMinutes: minutes,
+          mode: 'tour',
+          mobility: 'walk',
+          interests: auswahl.interests,
+        },
+        setPhase,
+      );
+
+    let response = await anfrage();
+    // Überlastete OSM-Server erholen sich meist in Sekunden – einmal still
+    // neu versuchen, bevor der Nutzer eine Fehlermeldung sieht.
+    // Nicht, wenn schon lange gewartet wurde – dann lieber ehrlich absagen.
+    if (!response.plan && response.error === 'sights-unavailable' && Date.now() - beginn < 30_000) {
+      setPhase('orte');
+      await new Promise((r) => setTimeout(r, 2500));
+      response = await anfrage();
+    }
 
     if (response.plan) {
       router.push(`/plan/${response.plan.id}`);
