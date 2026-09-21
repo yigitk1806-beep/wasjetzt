@@ -52,7 +52,7 @@ const SIGHTS_RADIUS_M = 2500;
 const SIGHTS_LIMIT = 500;
 
 /** Erhöhen, sobald sich ändert, welche Orte wie eingeordnet werden. */
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 
 /** Zellgröße des Caches (~2,2 km). Kleine Ortswechsel treffen denselben Cache. */
 const CACHE_CELL_DEGREES = 0.02;
@@ -337,9 +337,11 @@ function toSight(element: OverpassElement): Place | null {
   const profile = sightProfile(key);
   const notable = isNotable(tags);
 
-  // Die meisten Denkmäler, Brücken und Aussichtspunkte kosten nichts; Museen
-  // und Schlösser meist etwas. Das ist eine Schätzung und wird so ausgewiesen.
-  const fallbackLevel = key === 'museum' || key === 'castle' || key === 'palace' || key === 'zoo' || key === 'ship' ? 1 : 0;
+  // Die meisten Denkmäler, Brücken und Aussichtspunkte kosten nichts; Museen,
+  // Schlösser, Türme und Attraktionen (Miniatur Wunderland, Fernsehturm …)
+  // meist etwas. Das ist eine Schätzung und wird so ausgewiesen.
+  const kostetMeist = ['museum', 'castle', 'palace', 'zoo', 'ship', 'tower', 'attraction'];
+  const fallbackLevel = kostetMeist.includes(key) ? 1 : 0;
 
   return {
     id: `osm_${element.type[0]}${element.id}`,

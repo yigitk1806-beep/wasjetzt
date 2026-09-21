@@ -355,7 +355,9 @@ function buildNotes(ctx: PlanContext, steps: PlanStep[], dropped: number): PlanN
       kind: 'weather',
       text:
         outdoor === 0
-          ? 'Alles drinnen – bei dem Wetter die bessere Wahl.'
+          ? steps.every((s) => s.place.indoorOutdoor !== 'outdoor')
+            ? 'Alles drinnen – bei dem Wetter die bessere Wahl.'
+            : 'Wenn es regnet, seid ihr drinnen.'
           : 'Ein Teil ist draußen. Zieht euch was Wasserdichtes an.',
     });
   }
