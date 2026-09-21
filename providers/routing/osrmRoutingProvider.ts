@@ -17,7 +17,12 @@ const PROFILE: Partial<Record<Mobility, string>> = {
 };
 
 const BASE = 'https://routing.openstreetmap.de';
-const TIMEOUT_MS = 3500;
+/**
+ * Erster Versuch knapp, zweiter großzügiger: Eine frisch gestartete
+ * Serverless-Instanz baut acht TLS-Verbindungen gleichzeitig auf – dabei
+ * reißt ein zu enges Zeitlimit, obwohl der Dienst selbst in 0,1 s antwortet.
+ */
+const TIMEOUTS_MS = [4000, 7000];
 
 type OsrmResponse = {
   code: string;
@@ -71,13 +76,24 @@ export class OsrmRoutingProvider implements RoutingProvider {
     // stammen – nicht eine Luftlinie daneben.
     const url = `${BASE}/${profile}/route/v1/driving/${coords}?overview=full&geometries=polyline&alternatives=false&steps=false`;
 
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'WasJetzt/0.1 (Freizeitplaner)' },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (!res.ok) throw new Error(`OSRM ${res.status}`);
+    let json: OsrmResponse | null = null;
+    let letzterFehler: unknown = null;
+    for (const [versuch, timeout] of TIMEOUTS_MS.entries()) {
+      if (versuch > 0) await new Promise((r) => setTimeout(r, 300));
+      try {
+        const res = await fetch(url, {
+          headers: { 'User-Agent': 'WasJetzt/0.1 (Freizeitplaner)' },
+          signal: AbortSignal.timeout(timeout),
+        });
+        if (!res.ok) throw new Error(`OSRM ${res.status}`);
+        json = (await res.json()) as OsrmResponse;
+        break;
+      } catch (error) {
+        letzterFehler = error;
+      }
+    }
+    if (!json) throw letzterFehler ?? new Error('OSRM nicht erreichbar');
 
-    const json = (await res.json()) as OsrmResponse;
     const route = json.routes?.[0];
     if (json.code !== 'Ok' || !route) throw new Error(`OSRM: ${json.code}`);
 
