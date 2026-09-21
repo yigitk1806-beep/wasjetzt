@@ -21,7 +21,7 @@ const TIMEOUT_MS = 3500;
 
 type OsrmResponse = {
   code: string;
-  routes?: Array<{ distance: number; duration: number }>;
+  routes?: Array<{ distance: number; duration: number; geometry?: string }>;
 };
 
 export class OsrmUnsupportedError extends Error {
@@ -67,7 +67,9 @@ export class OsrmRoutingProvider implements RoutingProvider {
     key: string,
   ): Promise<TravelLeg> {
     const coords = `${query.from.lon.toFixed(5)},${query.from.lat.toFixed(5)};${query.to.lon.toFixed(5)},${query.to.lat.toFixed(5)}`;
-    const url = `${BASE}/${profile}/route/v1/driving/${coords}?overview=false&alternatives=false&steps=false`;
+    // Mit Geometrie: Die Karte zeigt genau den Weg, aus dem Distanz und Dauer
+    // stammen – nicht eine Luftlinie daneben.
+    const url = `${BASE}/${profile}/route/v1/driving/${coords}?overview=full&geometries=polyline&alternatives=false&steps=false`;
 
     const res = await fetch(url, {
       headers: { 'User-Agent': 'WasJetzt/0.1 (Freizeitplaner)' },
@@ -82,8 +84,10 @@ export class OsrmRoutingProvider implements RoutingProvider {
     const leg: TravelLeg = {
       mode: query.mode,
       distanceMeters: Math.round(route.distance),
-      durationMin: Math.max(1, Math.round(route.duration / 60)),
+      // Unter 40 Metern ist man schon da – kein "1 Min." für null Meter.
+      durationMin: route.distance < 40 ? 0 : Math.max(1, Math.round(route.duration / 60)),
       estimated: false,
+      geometry: route.geometry || undefined,
     };
 
     this.cache.set(key, { at: Date.now(), leg });

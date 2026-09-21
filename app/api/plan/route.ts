@@ -4,13 +4,21 @@ import {
   buildPlan,
   buildPlanVariants,
   createPlanContext,
+  homeByNote,
   refinePlanRouting,
 } from '@/engine/planBuilder';
 import { variantByKey } from '@/engine/scoring';
 import { buildTour } from '@/engine/tourBuilder';
 import { getProviders } from '@/providers/registry';
 import { normalizePlanRequest, normalizePreferences, RequestError } from '@/lib/requestSchema';
-import { localHour, processOffsetMin } from '@/lib/time';
+import {
+  clockFromMinutes,
+  formatClock,
+  formatDuration,
+  localHour,
+  parseClock,
+  processOffsetMin,
+} from '@/lib/time';
 import type { Mood, Plan } from '@/types/domain';
 
 export const runtime = 'nodejs';
@@ -126,10 +134,13 @@ async function runPipeline(
         preferNovelty: input.preferNovelty ?? intent.preferNovelty,
         moods: mergeMoods(input.moods, intent.moods),
       };
-      if (intent.homeByMinutes !== undefined) {
-        merged.mustBeHomeByISO =
-          input.mustBeHomeByISO ??
-          homeByFrom(intent.homeByMinutes, merged.startISO, clientOffset(input));
+      // Uhrzeiten aus dem Freitext meinen die Ortszeit – aufgelöst wird im
+      // Planungskontext, sobald die Zeitzone des Ortes bekannt ist.
+      if (intent.homeByMinutes !== undefined && !input.homeByLocal && !input.mustBeHomeByISO) {
+        merged.homeByLocal = clockFromMinutes(intent.homeByMinutes);
+      }
+      if (intent.startMinutes !== undefined && !input.startLocal) {
+        merged.startLocal = clockFromMinutes(intent.startMinutes);
       }
     }
 
@@ -153,6 +164,28 @@ async function runPipeline(
     const plans = kandidaten.filter((p): p is Plan => Boolean(p));
 
     if (plans.length === 0) {
+      // Mit Heimkehrzeit kann das Fenster schlicht zu kurz sein – das sagen
+      // wir so, statt "nichts gefunden".
+      const fensterMin = (ctx.latestEnd.getTime() - ctx.start.getTime()) / 60_000;
+      if (ctx.request.mustBeHomeByISO && fensterMin < 75) {
+        const uhr = formatClock(ctx.request.mustBeHomeByISO, 'de', ctx.tzOffsetMin);
+        return {
+          ok: false,
+          status: 200,
+          error: 'no-plan',
+          message: `Bis ${uhr} Uhr zuhause ist zu knapp – mit Hin- und Rückweg passt nichts Sinnvolles mehr hinein.`,
+          understood,
+        };
+      }
+      if (!isTour && fensterMin < 75) {
+        return {
+          ok: false,
+          status: 200,
+          error: 'no-plan',
+          message: `In ${formatDuration(Math.round(fensterMin))} finde ich gerade nichts, das offen und schnell genug erreichbar ist.`,
+          understood,
+        };
+      }
       return {
         ok: false,
         status: 200,
@@ -176,6 +209,18 @@ async function runPipeline(
       emoji: variantByKey(plan.variant).emoji,
     }));
     for (const plan of plans) plan.siblings = siblings;
+
+    // Heimkehrzeit kürzt den Wunsch? Dann offen sagen, wie viel passt.
+    const knapp = homeByNote(ctx, plans[0], (c) =>
+      isTour ? buildTour(c) : buildPlan(c, plans[0].variant),
+    );
+    if (knapp) {
+      // "Nichts Passendes offen" wäre hier falsch – es lag an der Zeit.
+      plans[0].notes = [
+        knapp,
+        ...plans[0].notes.filter((n) => !n.text.startsWith('Für einen weiteren Programmpunkt')),
+      ];
+    }
 
     melde('wege');
     const routed = await Promise.all(
@@ -219,31 +264,22 @@ function mergeMoods(explicit: unknown, parsed: Mood[]): Mood[] {
   return Array.from(new Set([...list, ...parsed]));
 }
 
-/**
- * „Bis 22 Uhr zuhause" → Zeitpunkt. Die Uhrzeit meint die Ortszeit des Nutzers,
- * nicht die des Servers – deshalb über den vom Gerät gemeldeten Versatz.
- */
-function homeByFrom(minutesSinceMidnight: number, startISO: unknown, offsetMin: number): string {
-  const base = typeof startISO === 'string' ? new Date(startISO) : new Date();
-  const lokal = new Date(base.getTime() + offsetMin * 60_000);
-  const mitternachtLokal = Date.UTC(lokal.getUTCFullYear(), lokal.getUTCMonth(), lokal.getUTCDate());
-  let ziel = mitternachtLokal + minutesSinceMidnight * 60_000 - offsetMin * 60_000;
-  // Liegt die Uhrzeit vor dem Start, ist der nächste Tag gemeint.
-  if (ziel <= base.getTime()) ziel += 24 * 60 * 60_000;
-  return new Date(ziel).toISOString();
-}
-
 /** "Überrasch mich": zufällige, aber zur Tageszeit passende Stimmung. */
 function applySurprise(
   input: Record<string, unknown>,
   preferences: ReturnType<typeof normalizePreferences>,
 ): Record<string, unknown> {
-  const hour = Math.floor(
-    localHour(
-      new Date(typeof input.startISO === 'string' ? input.startISO : Date.now()),
-      clientOffset(input),
-    ),
-  );
+  // Mit gewählter Startzeit zählt deren Tageszeit, nicht die von jetzt.
+  const gewaehlt = parseClock(input.startLocal);
+  const hour =
+    gewaehlt !== null
+      ? Math.floor(gewaehlt / 60)
+      : Math.floor(
+          localHour(
+            new Date(typeof input.startISO === 'string' ? input.startISO : Date.now()),
+            clientOffset(input),
+          ),
+        );
 
   const pool: Mood[] =
     hour < 12

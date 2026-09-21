@@ -1,8 +1,8 @@
 import { estimateTravelMinutes, haversineMeters } from '@/lib/geo';
 import { shortId } from '@/lib/id';
-import { formatClock, isOpenDuring, localHour } from '@/lib/time';
+import { formatClock, isOpenDuring, localDayDiff, localHour } from '@/lib/time';
 import type { Coordinates, Place, Plan, PlanStep, SightTheme } from '@/types/domain';
-import { assemblePlan, roundToFive, weatherAt } from './planBuilder';
+import { assemblePlan, homeLeg, roundToFive, weatherAt } from './planBuilder';
 import type { PlanContext } from './types';
 import { fitsTimeOfDay } from './timeOfDay';
 import { isWeatherBlocked, weatherFit, weatherModeOf } from './weatherRules';
@@ -211,10 +211,66 @@ function gleicherOrt(a: Place, b: Place): boolean {
   return gemeinsam >= 6;
 }
 
+/** Sonnenuntergang am Tag des Zeitpunkts – ein Plan für morgen braucht den von morgen. */
+function sunsetOn(ctx: PlanContext, date: Date): Date | null {
+  const passend = (ctx.weather.sunsetsISO ?? []).find(
+    (iso) => localDayDiff(new Date(iso), date, ctx.tzOffsetMin) === 0,
+  );
+  const iso = passend ?? ctx.weather.sunsetISO;
+  return iso ? new Date(iso) : null;
+}
+
+/**
+ * Kann dieser Ort zu dieser Zeit Teil der Tour sein? Eine Stelle für alle
+ * Regeln – beim Planen, beim Ersetzen und beim Verschieben auf eine andere
+ * Startzeit gilt dasselbe:
+ *  - Sehenswürdigkeit: bekannte Öffnungszeiten hart, sonst nur tagsüber;
+ *    draußen nur bei Tageslicht und ohne Unwetter,
+ *  - Pause (Café, Essen): nur mit bekannten Öffnungszeiten und zur Tageszeit,
+ *  - mit Heimkehrzeit: danach muss der Weg nach Hause noch passen.
+ */
+export function tourStopFits(
+  ctx: PlanContext,
+  place: Place,
+  arrive: Date,
+  dwell: number,
+  tourEnd: Date = ctx.latestEnd,
+): boolean {
+  const leave = new Date(arrive.getTime() + dwell * 60_000);
+  if (leave > tourEnd) return false;
+
+  const heim = homeLeg(ctx, place.location);
+  if (heim && ctx.request.mustBeHomeByISO) {
+    const zuhause = leave.getTime() + heim.durationMin * 60_000;
+    if (zuhause > new Date(ctx.request.mustBeHomeByISO).getTime()) return false;
+  }
+
+  if (!place.themes?.length) {
+    if (!fitsTimeOfDay(place, arrive, ctx.tzOffsetMin)) return false;
+    return Boolean(place.openingHours) && isOpenDuring(place.openingHours!, arrive, dwell, ctx.tzOffsetMin);
+  }
+
+  if (place.openingHours) {
+    if (!isOpenDuring(place.openingHours, arrive, dwell, ctx.tzOffsetMin)) return false;
+  } else if (place.category === 'nature') {
+    // Öffentlich zugänglich – nur Tageslicht und Tageszeit zählen.
+    if (!fitsTimeOfDay(place, arrive, ctx.tzOffsetMin)) return false;
+  } else if (localHour(arrive, ctx.tzOffsetMin) < 9 || localHour(leave, ctx.tzOffsetMin) >= 20) {
+    return false;
+  }
+
+  if (isWeatherBlocked(place, weatherAt(ctx.weather, arrive.toISOString()))) return false;
+
+  // Draußen braucht es Tageslicht, um etwas zu sehen.
+  const sunset = sunsetOn(ctx, arrive);
+  if (place.indoorOutdoor === 'outdoor' && sunset && leave > sunset) return false;
+
+  return true;
+}
+
 /** Wählt die nächste Station: viel Wert, wenig Umweg, zur Zeit offen. */
 function pickNextSight(options: PickOptions): Pick | null {
   const { ctx, settings, candidates, used, cursor, from, tourEnd } = options;
-  const sunset = ctx.weather.sunsetISO ? new Date(ctx.weather.sunsetISO) : null;
   let best: Pick | null = null;
 
   for (const place of candidates) {
@@ -231,24 +287,8 @@ function pickNextSight(options: PickOptions): Pick | null {
     const arrive = roundToFive(new Date(cursor.getTime() + travelMin * 60_000));
     const dwell = Math.max(10, Math.round(place.typicalDurationMin * settings.dwellFactor));
     const leave = new Date(arrive.getTime() + dwell * 60_000);
-
-    if (leave > tourEnd) continue;
-
-    // Öffnungszeiten: bekannt → hart prüfen; unbekannt → nur tagsüber.
-    if (place.openingHours) {
-      if (!isOpenDuring(place.openingHours, arrive, dwell, ctx.tzOffsetMin)) continue;
-    } else if (place.category === 'nature') {
-      // Öffentlich zugänglich – nur Tageslicht und Tageszeit zählen.
-      if (!fitsTimeOfDay(place, arrive, ctx.tzOffsetMin)) continue;
-    } else if (localHour(arrive, ctx.tzOffsetMin) < 9 || localHour(leave, ctx.tzOffsetMin) >= 20) {
-      continue;
-    }
-
+    if (!tourStopFits(ctx, place, arrive, dwell, tourEnd)) continue;
     const weather = weatherAt(ctx.weather, arrive.toISOString());
-    if (isWeatherBlocked(place, weather)) continue;
-
-    // Draußen braucht es Tageslicht, um etwas zu sehen.
-    if (place.indoorOutdoor === 'outdoor' && sunset && leave > sunset) continue;
 
     const weiterweg = options.towards
       ? estimateTravelMinutes(haversineMeters(place.location, options.towards), ctx.request.mobility)
@@ -326,12 +366,8 @@ function pickBreak(
     const arrive = roundToFive(new Date(cursor.getTime() + travelMin * 60_000));
     const dwell = place.category === 'food' ? 60 : 40;
     const leave = new Date(arrive.getTime() + dwell * 60_000);
-    if (leave > tourEnd) continue;
-    if (!fitsTimeOfDay(place, arrive, ctx.tzOffsetMin)) continue;
     // Pausen nur dort, wo sicher offen ist.
-    if (!place.openingHours || !isOpenDuring(place.openingHours, arrive, dwell, ctx.tzOffsetMin)) {
-      continue;
-    }
+    if (!tourStopFits(ctx, place, arrive, dwell, tourEnd)) continue;
 
     const bevorzugt = place.category === wanted[0] ? 0.6 : 0;
     const score = bevorzugt - distanceMeters / 700;

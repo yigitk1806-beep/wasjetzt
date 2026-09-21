@@ -157,6 +157,16 @@ const RULES: Rule[] = [
     label: (m) => `zuhause bis ${m[1]}:${m[2] ?? '00'} Uhr`,
   },
   {
+    // "ab 15 Uhr", "um 14:30 los", "starten um 18 Uhr" – aber nicht "um 22 Uhr zuhause".
+    test: /\b(?:ab|um|starten um|los um)\s*(\d{1,2})(?::(\d{2}))?\s*uhr\b(?!\s*(?:wieder\s*)?(?:zu\s*hause|zuhause|daheim))/i,
+    apply: (i, m) => {
+      const h = Number(m[1]);
+      const min = Number(m[2] ?? 0);
+      if (Number.isFinite(h) && h <= 23) i.startMinutes = h * 60 + (Number.isFinite(min) ? min : 0);
+    },
+    label: (m) => `Start um ${m[1]}:${m[2] ?? '00'} Uhr`,
+  },
+  {
     test: /\b(?:nur|hab(?:e)?|haben)\s*(?:noch\s*)?(\d{1,2})\s*(?:stunden|std|h)\b/i,
     apply: (i, m) => {
       const n = toNumber(m[1]);

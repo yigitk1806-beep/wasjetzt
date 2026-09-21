@@ -157,3 +157,60 @@ export function clockFromMinutes(min: number): string {
   const m = ((Math.round(min) % 1440) + 1440) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
+
+/** "14:30" → 870 Minuten seit Mitternacht; `null`, wenn es keine Uhrzeit ist. */
+export function parseClock(text: unknown): number | null {
+  if (typeof text !== 'string') return null;
+  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(text.trim());
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+/**
+ * Der nächste Zeitpunkt, an dem es am Ort `minutes` nach Mitternacht ist –
+ * frühestens `after` (abzüglich `toleranceMin`). Liegt die Uhrzeit heute schon
+ * zurück, ist morgen gemeint.
+ */
+export function nextLocalTime(
+  minutes: number,
+  after: Date,
+  offsetMin: number,
+  toleranceMin = 0,
+): Date {
+  const lokal = new Date(after.getTime() + offsetMin * 60_000);
+  const mitternacht = Date.UTC(lokal.getUTCFullYear(), lokal.getUTCMonth(), lokal.getUTCDate());
+  let ziel = mitternacht + minutes * 60_000 - offsetMin * 60_000;
+  if (ziel < after.getTime() - toleranceMin * 60_000) ziel += 24 * 60 * 60_000;
+  return new Date(ziel);
+}
+
+/** Ortszeit als "HH:MM" – Gegenstück zu `parseClock`. */
+export function localClock(date: Date, offsetMin: number): string {
+  return clockFromMinutes(minutesSinceMidnight(date, offsetMin));
+}
+
+/** Kalendertage zwischen zwei Zeitpunkten in Ortszeit: 0 = heute, 1 = morgen. */
+export function localDayDiff(date: Date, reference: Date, offsetMin: number): number {
+  const tag = (d: Date) => Math.floor((d.getTime() + offsetMin * 60_000) / 86_400_000);
+  return tag(date) - tag(reference);
+}
+
+const WOCHENTAG = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+
+/** "Heute", "Morgen" oder der Wochentag – in Ortszeit des Plans. */
+export function dayLabel(iso: string, offsetMin: number, now = new Date()): string {
+  const date = new Date(iso);
+  const diff = localDayDiff(date, now, offsetMin);
+  if (diff === 0) return 'Heute';
+  if (diff === 1) return 'Morgen';
+  if (diff === -1) return 'Gestern';
+  return WOCHENTAG[weekdayOf(date, offsetMin)];
+}
+
+/** Auf fünf Minuten aufrunden – „jetzt" wird nicht auf die Viertelstunde verschoben. */
+export function roundUpToFive(date: Date): Date {
+  const d = new Date(date);
+  d.setSeconds(0, 0);
+  const rest = d.getMinutes() % 5;
+  if (rest !== 0) d.setMinutes(d.getMinutes() + (5 - rest));
+  return d;
+}

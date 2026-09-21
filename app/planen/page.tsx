@@ -1,12 +1,22 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { PlanningOverlay } from '@/components/PlanningOverlay';
 import { ArrowRight } from '@/components/ui/icons';
+import {
+  TimeField,
+  clockFromMin,
+  jetztText,
+  minutesOf,
+  nextQuarter,
+  startLabel,
+  startMinutes,
+  useNowClock,
+} from '@/components/ui/TimeField';
 import { useLocale } from '@/components/LocaleProvider';
 import { useLocation } from '@/hooks/useLocation';
 import { loadPreferences } from '@/lib/clientStore';
@@ -65,7 +75,13 @@ export default function BuildPlanPage() {
   const [budget, setBudget] = useState<BudgetPreset>('any');
   const [moods, setMoods] = useState<Mood[]>([]);
   const [mobility, setMobility] = useState<Mobility>('transit');
-  const [homeBy, setHomeBy] = useState<string>('');
+  // Beide Uhrzeiten als Ortszeit ("14:30"); null = jetzt bzw. keine Endzeit.
+  const [startAt, setStartAt] = useState<string | null>(null);
+  const [homeBy, setHomeBy] = useState<string | null>(null);
+  // Hat der Nutzer die Dauer selbst gewählt? Sonst passt sie sich dem
+  // Zeitfenster zwischen Start und Heimkehr an.
+  const [minutesTouched, setMinutesTouched] = useState(false);
+  const jetzt = useNowClock();
   const [singleActivity, setSingleActivity] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -109,29 +125,35 @@ export default function BuildPlanPage() {
 
   function applyIntent(intent: Record<string, unknown>) {
     if (typeof intent.party === 'string') setParty(intent.party as Party);
-    if (typeof intent.availableMinutes === 'number') setMinutes(intent.availableMinutes);
+    if (typeof intent.availableMinutes === 'number') {
+      setMinutes(intent.availableMinutes);
+      setMinutesTouched(true);
+    }
+    if (typeof intent.startMinutes === 'number') {
+      setStartAt(clockFromMin(intent.startMinutes));
+      setShowMore(true);
+    }
     if (typeof intent.budget === 'string') setBudget(intent.budget as BudgetPreset);
     if (typeof intent.mobility === 'string') setMobility(intent.mobility as Mobility);
     if (Array.isArray(intent.moods) && intent.moods.length > 0) {
       setMoods(intent.moods as Mood[]);
     }
     if (typeof intent.homeByMinutes === 'number') {
-      const h = Math.floor(intent.homeByMinutes / 60) % 24;
-      const m = intent.homeByMinutes % 60;
-      setHomeBy(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+      setHomeBy(clockFromMin(intent.homeByMinutes));
       setShowMore(true);
     }
   }
 
-  const mustBeHomeByISO = useMemo(() => {
-    if (!homeBy) return undefined;
-    const [h, m] = homeBy.split(':').map(Number);
-    if (!Number.isFinite(h)) return undefined;
-    const target = new Date();
-    target.setHours(h, m || 0, 0, 0);
-    if (target <= new Date()) target.setDate(target.getDate() + 1);
-    return target.toISOString();
-  }, [homeBy]);
+  // Zeitfenster zwischen Start und Heimkehr – daran richtet sich die Dauer
+  // aus, solange der Nutzer sie nicht selbst gewählt hat.
+  const startMin = startMinutes(startAt, jetzt);
+  const fensterMin =
+    homeBy && startMin !== null ? (((minutesOf(homeBy) - startMin) % 1440) + 1440) % 1440 : null;
+  useEffect(() => {
+    if (fensterMin === null || minutesTouched) return;
+    const passend = [...TIMES].reverse().find((t) => t.minutes <= fensterMin) ?? TIMES[0];
+    setMinutes(passend.minutes);
+  }, [fensterMin, minutesTouched]);
 
   async function submit() {
     if (!location) {
@@ -152,7 +174,10 @@ export default function BuildPlanPage() {
       budget,
       moods,
       mobility,
-      mustBeHomeByISO,
+      // Uhrzeiten gehen als Ortszeit zum Server; der rechnet mit der
+      // Zeitzone des Standorts, nicht mit der des Geräts.
+      startLocal: startAt ?? undefined,
+      homeByLocal: homeBy ?? undefined,
       singleActivity,
       rawText: rawText.trim() || undefined,
     }, setPhase);
@@ -244,7 +269,10 @@ export default function BuildPlanPage() {
               <Chip
                 key={option.minutes}
                 selected={minutes === option.minutes}
-                onClick={() => setMinutes(option.minutes)}
+                onClick={() => {
+                  setMinutes(option.minutes);
+                  setMinutesTouched(true);
+                }}
               >
                 {option.label}
               </Chip>
@@ -293,7 +321,15 @@ export default function BuildPlanPage() {
             onClick={() => setShowMore((v) => !v)}
             className="tap flex w-full items-center justify-between rounded-2xl bg-canvas-sunk px-4 py-3 text-[0.88rem] font-medium text-ink-soft"
           >
-            {t.build.more}
+            <span className="min-w-0 truncate text-left">
+              {t.build.more}
+              {startAt || homeBy ? (
+                <span className="font-semibold text-brand-600">
+                  {startAt ? ` · Start ${startAt}` : ''}
+                  {homeBy ? ` · Zuhause ${homeBy}` : ''}
+                </span>
+              ) : null}
+            </span>
             <svg
               width="18"
               height="18"
@@ -320,6 +356,39 @@ export default function BuildPlanPage() {
                 exit={{ opacity: 0, height: 0 }}
                 className="space-y-5 overflow-hidden pt-5"
               >
+                <div className="space-y-2.5">
+                  <TimeField
+                    icon="🕐"
+                    label="Wann starten?"
+                    value={startAt}
+                    emptyText={jetztText(jetzt)}
+                    valueText={(v) => startLabel(v)}
+                    actionText="Startzeit ändern"
+                    resetText="Jetzt"
+                    pickerDefault={nextQuarter(jetzt)}
+                    onChange={setStartAt}
+                  />
+                  <TimeField
+                    icon="🏠"
+                    label={t.build.homeBy}
+                    value={homeBy}
+                    emptyText="Keine feste Endzeit"
+                    valueText={(v) => `${v} Uhr`}
+                    actionText="Festlegen"
+                    resetText="Keine"
+                    pickerDefault={clockFromMin(Math.round(((startMin ?? 720) + 240) / 60) * 60)}
+                    commitOnBlur
+                    onChange={setHomeBy}
+                  />
+                  {fensterMin !== null ? (
+                    <p className="px-1 text-[0.78rem] text-ink-muted">
+                      {fensterMin < 60
+                        ? 'Das ist sehr knapp – mit Hin- und Rückweg bleibt kaum Zeit.'
+                        : `Bis dahin bleiben ${Math.floor(fensterMin / 60)} Std.${fensterMin % 60 ? ` ${fensterMin % 60} Min.` : ''} – der Rückweg wird eingerechnet.`}
+                    </p>
+                  ) : null}
+                </div>
+
                 <Section title={t.build.mobility}>
                   <div className="flex flex-wrap gap-2">
                     {MOBILITY.map((option) => (
@@ -332,22 +401,6 @@ export default function BuildPlanPage() {
                         {option.label}
                       </Chip>
                     ))}
-                  </div>
-                </Section>
-
-                <Section title={t.build.homeBy}>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="time"
-                      value={homeBy}
-                      onChange={(e) => setHomeBy(e.target.value)}
-                      className="rounded-2xl bg-canvas-raised px-4 py-2.5 text-[0.95rem] shadow-card outline-none ring-brand-300 hairline focus:ring-2"
-                    />
-                    {homeBy ? (
-                      <Chip tone="soft" onClick={() => setHomeBy('')}>
-                        {t.build.homeByOff}
-                      </Chip>
-                    ) : null}
                   </div>
                 </Section>
 

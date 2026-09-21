@@ -109,6 +109,7 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
       hourly: list,
       sunriseISO: json.daily?.sunrise?.[0] ? ortszeit(json.daily.sunrise[0]).toISOString() : undefined,
       sunsetISO: json.daily?.sunset?.[0] ? ortszeit(json.daily.sunset[0]).toISOString() : undefined,
+      sunsetsISO: (json.daily?.sunset ?? []).map((t) => ortszeit(t).toISOString()),
       utcOffsetSeconds: json.utc_offset_seconds,
       source: 'open-meteo',
     };

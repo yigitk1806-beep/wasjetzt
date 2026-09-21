@@ -9,12 +9,12 @@ import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Share } from '@/components/ui/icons';
 import { PlanningOverlay } from '@/components/PlanningOverlay';
-import { formatPrice } from '@/components/plan/PlanTimeline';
 import { ReplaceSheet, type ReplaceOption } from '@/components/plan/ReplaceSheet';
 import { ShareSheet } from '@/components/plan/ShareSheet';
 import { GroupPanel } from '@/components/plan/GroupPanel';
 import { FeedbackSheet } from '@/components/plan/FeedbackSheet';
-import { weatherEmoji } from '@/engine/weatherRules';
+import { PlanHeader } from '@/components/plan/PlanHeader';
+import { TimeSheet } from '@/components/plan/TimeSheet';
 import { formatClock, formatDuration } from '@/lib/time';
 import { recordPlanStarted } from '@/lib/clientStore';
 import { replacePlanStep, requestPlanStreamed, type PlanPhase } from '@/lib/planClient';
@@ -72,6 +72,7 @@ export function TourView({ initialPlan }: Props) {
   const [phase, setPhase] = useState<PlanPhase | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [tweakError, setTweakError] = useState<string | null>(null);
+  const [timeOpen, setTimeOpen] = useState(false);
 
   // Wo man gerade steht: -1 = noch nicht gestartet.
   const [position, setPosition] = useState(-1);
@@ -161,12 +162,17 @@ export function TourView({ initialPlan }: Props) {
     setRegenerating(true);
     setPhase(null);
     const r = plan.request;
+    // Die neue Tour behält die gewählte Zeit, solange sie noch vor uns liegt.
+    const abfahrt = new Date(plan.departISO ?? plan.startISO);
+    const startISO = (abfahrt.getTime() > Date.now() ? abfahrt : new Date()).toISOString();
+    const heim = r.mustBeHomeByISO && new Date(r.mustBeHomeByISO) > new Date(startISO) ? r.mustBeHomeByISO : undefined;
     const response = await requestPlanStreamed(
       {
         lat: r.origin.lat,
         lon: r.origin.lon,
         originLabel: r.originLabel,
-        startISO: new Date().toISOString(),
+        startISO,
+        mustBeHomeByISO: heim,
         availableMinutes: r.availableMinutes,
         mobility: r.mobility,
         budget: r.budget,
@@ -239,36 +245,7 @@ export function TourView({ initialPlan }: Props) {
       </header>
 
       <main className="shell space-y-5 pb-32 pt-3">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <p className="text-[0.9rem] font-medium text-brand-600">Deine Tour ist fertig.</p>
-          <h1 className="mt-1 text-[1.9rem] font-bold leading-tight tracking-[-0.025em]">
-            {plan.title}
-          </h1>
-          <p className="mt-1.5 text-[0.95rem] text-ink-muted">{plan.summary}</p>
-        </motion.div>
-
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.86rem] text-ink-soft">
-          <span className="font-semibold tabular-nums">
-            {formatClock(plan.startISO, 'de', plan.tzOffsetMin)} –{' '}
-            {formatClock(plan.endISO, 'de', plan.tzOffsetMin)}
-          </span>
-          <span className="text-ink-faint">·</span>
-          <span>{formatDuration(plan.totalDurationMin)}</span>
-          <span className="text-ink-faint">·</span>
-          <span>{formatPrice(plan.cost, plan.currency)}</span>
-          {plan.weatherAtCreation && plan.weatherAtCreation.condition !== 'unknown' ? (
-            <>
-              <span className="text-ink-faint">·</span>
-              <span>
-                {weatherEmoji(plan.weatherAtCreation)} {Math.round(plan.weatherAtCreation.temperatureC)} °C
-              </span>
-            </>
-          ) : null}
-        </div>
+        <PlanHeader plan={plan} onTimeClick={() => setTimeOpen(true)} />
 
         <AnimatePresence>
           {weatherAlert ? (
@@ -301,7 +278,13 @@ export function TourView({ initialPlan }: Props) {
           ) : null}
         </AnimatePresence>
 
-        <PlanMap origin={plan.request.origin} steps={plan.steps} mobility={plan.request.mobility} />
+        <PlanMap
+          origin={plan.request.origin}
+          steps={plan.steps}
+          mobility={plan.request.mobility}
+          returnHome={plan.returnHome}
+          home={plan.request.homeLocation}
+        />
 
         <ol aria-label={`${stationen} Stationen`}>
           {plan.steps.map((step, index) => (
@@ -320,8 +303,29 @@ export function TourView({ initialPlan }: Props) {
                 setReplacing(s);
               }}
               index={index}
+              departISO={index === 0 ? plan.departISO : undefined}
             />
           ))}
+          {plan.returnHome ? (
+            <li className="relative pl-12">
+              <div className="flex items-center gap-2 py-2.5 text-[0.78rem] text-ink-muted">
+                <span aria-hidden>🚶</span>
+                <span>
+                  Rückweg {plan.returnHome.estimated ? 'ca. ' : ''}
+                  {formatDuration(plan.returnHome.durationMin)}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 rounded-3xl bg-canvas-sunk px-4 py-3">
+                <span aria-hidden className="text-xl">🏠</span>
+                <p className="text-[0.92rem] font-semibold">
+                  Zuhause {plan.returnHome.estimated ? 'ca. ' : 'um '}
+                  <span className="tabular-nums">
+                    {formatClock(plan.returnHome.arriveISO, 'de', plan.tzOffsetMin)}
+                  </span>
+                </p>
+              </div>
+            </li>
+          ) : null}
         </ol>
 
         {plan.notes.length > 0 ? (
@@ -401,6 +405,7 @@ export function TourView({ initialPlan }: Props) {
         note="Der Rest der Tour bleibt, nur die Zeiten danach verschieben sich."
       />
       <ShareSheet plan={plan} open={shareOpen} onClose={() => setShareOpen(false)} />
+      <TimeSheet plan={plan} open={timeOpen} onClose={() => setTimeOpen(false)} onPlanChange={setPlan} />
       <FeedbackSheet plan={plan} open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
       <PlanningOverlay open={regenerating} phase={phase} />
     </>

@@ -199,6 +199,8 @@ export type WeatherForecast = {
   hourly: WeatherSlice[];
   sunriseISO?: string;
   sunsetISO?: string;
+  /** Sonnenuntergänge aller Vorhersagetage – für Pläne, die morgen stattfinden. */
+  sunsetsISO?: string[];
   /**
    * Versatz der Ortszeit gegenüber UTC. Grundlage für alles, was „wie spät
    * ist es dort?" fragt – der Server selbst läuft bei Vercel auf UTC.
@@ -215,6 +217,11 @@ export type TravelLeg = {
   durationMin: number;
   /** Grobe Schätzung – true, wenn kein echter Routing-Provider im Spiel war. */
   estimated: boolean;
+  /**
+   * Echte Wegführung als kodierte Polyline (Google-Format, 5 Nachkommastellen),
+   * genau die Route, aus der Distanz und Dauer stammen. Fehlt bei Schätzungen.
+   */
+  geometry?: string;
 };
 
 export type PlanStep = {
@@ -250,6 +257,19 @@ export type Plan = {
   steps: PlanStep[];
   startISO: string;
   endISO: string;
+  /**
+   * Wann es losgeht – die gewählte Startzeit. `startISO` ist die Ankunft an
+   * der ersten Station, also Startzeit plus Weg.
+   */
+  departISO?: string;
+  /** Weg zurück, wenn eine Heimkehrzeit gesetzt ist. */
+  returnHome?: {
+    durationMin: number;
+    distanceMeters: number;
+    estimated: boolean;
+    arriveISO: string;
+    geometry?: string;
+  };
   totalDurationMin: number;
   cost: PlanCost;
   currency: string;
@@ -329,6 +349,14 @@ export type PlanRequest = {
   mobility: Mobility;
   /** ISO – "wir müssen um X zuhause sein". */
   mustBeHomeByISO?: string;
+  /**
+   * Gewünschte Startzeit als Ortszeit des Standorts, z. B. "14:30". Der
+   * Server rechnet sie mit der Zeitzone des Ortes in `startISO` um – das Gerät
+   * des Nutzers kann in einer anderen Zeitzone sein.
+   */
+  startLocal?: string;
+  /** Heimkehrzeit als Ortszeit, z. B. "21:00". Wird zu `mustBeHomeByISO`. */
+  homeByLocal?: string;
   /** Wenn gesetzt, endet der Plan Richtung Zuhause. */
   homeLocation?: Coordinates;
   /** Nur eine einzelne Aktivität statt eines ganzen Abends. */

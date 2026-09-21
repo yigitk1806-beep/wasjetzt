@@ -3,13 +3,18 @@
 import { useEffect, useRef } from 'react';
 import type * as LeafletNS from 'leaflet';
 import { formatDistance, haversineMeters } from '@/lib/geo';
-import type { Coordinates, Mobility, PlanStep } from '@/types/domain';
+import { formatDuration } from '@/lib/time';
+import { decodePolyline, wegSumme } from '@/lib/wege';
+import type { Coordinates, Mobility, Plan, PlanStep } from '@/types/domain';
 import 'leaflet/dist/leaflet.css';
 
 type Props = {
   origin: Coordinates;
   steps: PlanStep[];
   mobility: Mobility;
+  /** Rückweg, falls eine Heimkehrzeit gesetzt ist. */
+  returnHome?: Plan['returnHome'];
+  home?: Coordinates;
 };
 
 /**
@@ -23,16 +28,25 @@ const TILE_URL =
 const TILE_ATTRIBUTION =
   process.env.NEXT_PUBLIC_TILE_ATTRIBUTION ?? '&copy; OpenStreetMap';
 
+const ORANGE = '#f15c1c';
+
+const UNTERWEGS: Record<Mobility, string> = {
+  walk: 'zu Fuß',
+  bike: 'mit dem Rad',
+  transit: 'mit Bus & Bahn',
+  car: 'mit dem Auto',
+};
+
 /**
  * Echte Karte der Stationen. Leaflet wird erst im Browser geladen (~42 kB),
  * damit die Plan-Seite sofort sichtbar ist und die Karte nachrückt.
  *
- * Die Linie zwischen den Stationen ist bewusst eine direkte Verbindung und
- * keine Straßenführung: Die Fahrzeiten kommen zwar aus echtem Routing, die
- * Geometrie holen wir (noch) nicht mit. Deshalb ist sie gestrichelt
- * dargestellt und die Navigation führt in die Karten-App des Geräts.
+ * Jede Teilstrecke wird einzeln gezeichnet – mit der echten Wegführung aus
+ * dem Routing, also genau dem Weg, aus dem Gehstrecke und Gehzeit stammen.
+ * Nur wo es kein Routing gibt (etwa Bus & Bahn), steht eine gestrichelte
+ * Luftlinie, und die Beschriftung sagt das auch.
  */
-export function PlanMap({ origin, steps, mobility }: Props) {
+export function PlanMap({ origin, steps, mobility, returnHome, home }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletNS.Map | null>(null);
 
@@ -55,6 +69,9 @@ export function PlanMap({ origin, steps, mobility }: Props) {
         zoomControl: false,
         attributionControl: true,
         scrollWheelZoom: false,
+        // Feinere Zoomstufen: Die Tour füllt die Karte, statt in der Mitte
+        // eines viel zu großen Ausschnitts zu liegen.
+        zoomSnap: 0.25,
         // Auf dem Handy soll die Seite scrollen, nicht die Karte.
         dragging: !L.Browser.mobile,
       });
@@ -65,18 +82,43 @@ export function PlanMap({ origin, steps, mobility }: Props) {
         attribution: TILE_ATTRIBUTION,
       }).addTo(map);
 
-      const points: LeafletNS.LatLngExpression[] = [
-        [origin.lat, origin.lon],
-        ...steps.map((s) => [s.place.location.lat, s.place.location.lon] as [number, number]),
-      ];
+      const alle: LeafletNS.LatLngTuple[] = [[origin.lat, origin.lon]];
 
-      L.polyline(points, {
-        color: '#f15c1c',
-        weight: 3,
-        opacity: 0.85,
-        dashArray: '2 8',
-        lineCap: 'round',
-      }).addTo(map);
+      const strecke = (
+        from: Coordinates,
+        to: Coordinates,
+        geometry: string | undefined,
+        rueckweg = false,
+      ) => {
+        const echt = geometry ? decodePolyline(geometry) : null;
+        const punkte: LeafletNS.LatLngTuple[] =
+          echt && echt.length >= 2 ? echt : [[from.lat, from.lon], [to.lat, to.lon]];
+        alle.push(...punkte);
+
+        // Heller Rand unter der Linie – hebt sie von Straßen gleicher Farbe ab.
+        if (echt) {
+          L.polyline(punkte, { color: '#ffffff', weight: 7, opacity: 0.9, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(map);
+        }
+        L.polyline(punkte, {
+          color: rueckweg ? '#8b807a' : ORANGE,
+          weight: echt ? 4 : 3,
+          opacity: 0.9,
+          lineCap: 'round',
+          lineJoin: 'round',
+          // Gestrichelt heißt: hier ist kein echter Weg bekannt.
+          dashArray: echt ? (rueckweg ? '6 7' : undefined) : '2 8',
+          interactive: false,
+        }).addTo(map);
+      };
+
+      let from = origin;
+      for (const step of steps) {
+        if (step.travelFromPrevious.durationMin > 0 || step.travelFromPrevious.distanceMeters > 0) {
+          strecke(from, step.place.location, step.travelFromPrevious.geometry);
+        }
+        from = step.place.location;
+      }
+      if (returnHome) strecke(from, home ?? origin, returnHome.geometry, true);
 
       // Startpunkt
       L.marker([origin.lat, origin.lon], {
@@ -102,10 +144,7 @@ export function PlanMap({ origin, steps, mobility }: Props) {
         }).addTo(map);
       });
 
-      map.fitBounds(L.latLngBounds(points as LeafletNS.LatLngTuple[]), {
-        padding: [34, 34],
-        maxZoom: 16,
-      });
+      map.fitBounds(L.latLngBounds(alle), { padding: [26, 26], maxZoom: 16.5 });
     })();
 
     return () => {
@@ -115,17 +154,12 @@ export function PlanMap({ origin, steps, mobility }: Props) {
         mapRef.current = null;
       }
     };
-  }, [origin.lat, origin.lon, steps]);
-
-  const totalMeters = [origin, ...steps.map((s) => s.place.location)]
-    .slice(1)
-    .reduce((sum, point, i) => {
-      const previous = i === 0 ? origin : steps[i - 1].place.location;
-      return sum + haversineMeters(previous, point);
-    }, 0);
+  }, [origin.lat, origin.lon, steps, returnHome, home]);
 
   return (
-    <div className="overflow-hidden rounded-3xl bg-canvas-raised shadow-card hairline">
+    // `isolate`: Leaflet stapelt seine Ebenen mit z-index 400 und höher. Ohne
+    // eigenen Stapelkontext läge die Karte über Blättern und Dialogen.
+    <div className="isolate overflow-hidden rounded-3xl bg-canvas-raised shadow-card hairline">
       <div
         ref={containerRef}
         className="h-52 w-full bg-canvas-sunk"
@@ -133,8 +167,8 @@ export function PlanMap({ origin, steps, mobility }: Props) {
         aria-label={`Karte mit ${steps.length} Stationen`}
       />
       <div className="flex items-center justify-between gap-2 px-4 py-3">
-        <span className="text-[0.78rem] text-ink-muted">
-          {formatDistance(totalMeters)} Luftlinie insgesamt
+        <span className="min-w-0 text-[0.78rem] text-ink-muted">
+          {wegText(origin, steps, mobility, returnHome)}
         </span>
         <a
           href={mapsUrl(origin, steps, mobility)}
@@ -147,6 +181,32 @@ export function PlanMap({ origin, steps, mobility }: Props) {
       </div>
     </div>
   );
+}
+
+/**
+ * Beschriftung unter der Karte – aus denselben Daten wie die Linie:
+ *  - alles geroutet: „6,7 km Gesamtweg · ca. 1 Std. 25 Min. zu Fuß"
+ *  - nichts geroutet: ausdrücklich „Luftlinie"
+ *  - gemischt: Gesamtweg, aber als teils geschätzt gekennzeichnet
+ */
+function wegText(
+  origin: Coordinates,
+  steps: PlanStep[],
+  mobility: Mobility,
+  returnHome?: Plan['returnHome'],
+): string {
+  const summe = wegSumme({ steps, returnHome });
+  if (summe.routing === 'all' && summe.meter > 0) {
+    return `${formatDistance(summe.meter)} Gesamtweg · ca. ${formatDuration(summe.minuten)} ${UNTERWEGS[mobility]}`;
+  }
+  if (summe.routing === 'some') {
+    return `ca. ${formatDistance(summe.meter)} Gesamtweg · teils geschätzt`;
+  }
+  const luftlinie = steps.reduce((sum, step, i) => {
+    const previous = i === 0 ? origin : steps[i - 1].place.location;
+    return sum + haversineMeters(previous, step.place.location);
+  }, 0);
+  return `${formatDistance(luftlinie)} Luftlinie insgesamt`;
 }
 
 const TRAVEL_MODE: Record<Mobility, string> = {

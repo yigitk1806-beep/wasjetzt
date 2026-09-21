@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button } from '@/components/ui/Button';
 import dynamic from 'next/dynamic';
-import { PlanTimeline, formatPrice } from './PlanTimeline';
+import { PlanTimeline } from './PlanTimeline';
 
 // Leaflet wird erst im Browser geladen – die Plan-Seite ist sofort da,
 // die Karte rückt nach.
@@ -18,8 +18,8 @@ import { ReplaceSheet } from './ReplaceSheet';
 import { ShareSheet } from './ShareSheet';
 import { GroupPanel } from './GroupPanel';
 import { FeedbackSheet } from './FeedbackSheet';
-import { weatherEmoji } from '@/engine/weatherRules';
-import { formatClock, formatDuration } from '@/lib/time';
+import { PlanHeader } from './PlanHeader';
+import { TimeSheet } from './TimeSheet';
 import { recordPlanStarted, recordRejection } from '@/lib/clientStore';
 import { replacePlanStep } from '@/lib/planClient';
 import type { Plan, PlanStep } from '@/types/domain';
@@ -36,6 +36,7 @@ export function PlanView({ initialPlan }: Props) {
   const [started, setStarted] = useState(false);
   const [weatherAlert, setWeatherAlert] = useState<{ stepIds: string[] } | null>(null);
   const [adjusting, setAdjusting] = useState(false);
+  const [timeOpen, setTimeOpen] = useState(false);
 
   // Wetterwache: prüft beim Öffnen und danach alle 10 Minuten.
   useEffect(() => {
@@ -127,38 +128,7 @@ export function PlanView({ initialPlan }: Props) {
       </header>
 
       <main className="shell space-y-5 pb-28 pt-3">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <p className="text-[0.9rem] font-medium text-brand-600">Ich habe etwas für euch.</p>
-          <h1 className="mt-1 text-[1.9rem] font-bold leading-tight tracking-[-0.025em]">
-            {plan.title}
-          </h1>
-          <p className="mt-1.5 text-[0.95rem] text-ink-muted">{plan.summary}</p>
-        </motion.div>
-
-        {/* Kennzahlen auf einen Blick */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.86rem] text-ink-soft">
-          <span className="font-semibold">
-            {formatClock(plan.startISO, 'de', plan.tzOffsetMin)} –{' '}
-            {formatClock(plan.endISO, 'de', plan.tzOffsetMin)}
-          </span>
-          <span className="text-ink-faint">·</span>
-          <span>{formatDuration(plan.totalDurationMin)}</span>
-          <span className="text-ink-faint">·</span>
-          <span>{formatPrice(plan.cost, plan.currency)} pro Person</span>
-          {plan.weatherAtCreation && plan.weatherAtCreation.condition !== 'unknown' ? (
-            <>
-              <span className="text-ink-faint">·</span>
-              <span>
-                {weatherEmoji(plan.weatherAtCreation)}{' '}
-                {Math.round(plan.weatherAtCreation.temperatureC)} °C
-              </span>
-            </>
-          ) : null}
-        </div>
+        <PlanHeader plan={plan} onTimeClick={() => setTimeOpen(true)} />
 
         <AnimatePresence>
           {weatherAlert ? (
@@ -200,12 +170,17 @@ export function PlanView({ initialPlan }: Props) {
             setReplacing(step);
           }}
           highlightIds={weatherAlert?.stepIds ?? []}
+          departISO={plan.departISO}
+          returnHome={plan.returnHome}
+          mobility={plan.request.mobility}
         />
 
         <PlanMap
           origin={plan.request.origin}
           steps={plan.steps}
           mobility={plan.request.mobility}
+          returnHome={plan.returnHome}
+          home={plan.request.homeLocation}
         />
 
         {plan.notes.length > 0 ? (
@@ -281,6 +256,7 @@ export function PlanView({ initialPlan }: Props) {
         error={replaceError}
       />
       <ShareSheet plan={plan} open={shareOpen} onClose={() => setShareOpen(false)} />
+      <TimeSheet plan={plan} open={timeOpen} onClose={() => setTimeOpen(false)} onPlanChange={setPlan} />
       <FeedbackSheet plan={plan} open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </>
   );

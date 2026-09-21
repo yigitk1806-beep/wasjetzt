@@ -4,8 +4,10 @@ import {
   dayPartOf,
   formatClock,
   isOpenDuring,
+  nextLocalTime,
+  parseClock,
   processOffsetMin,
-  roundUpToQuarter,
+  roundUpToFive,
   seasonOf,
 } from '@/lib/time';
 import type { RouteQuery, RoutingProvider } from '@/providers/types';
@@ -18,6 +20,7 @@ import type {
   PlanRequest,
   PlanStep,
   PlanVariantKey,
+  TravelLeg,
   UserPreferences,
   WeatherForecast,
   WeatherSlice,
@@ -62,11 +65,20 @@ export async function createPlanContext(
   providers: ProviderSet,
   overrides?: { radiusMeters?: number },
 ): Promise<PlanContext> {
-  const start = roundUpToQuarter(new Date(request.startISO));
+  const now = new Date();
+  // Vorläufig mit der Zeitzone des Geräts – die des Ortes kennt erst der
+  // Wetterdienst. Reicht für die Suche; festgelegt wird weiter unten.
+  const vorlaeufig = resolveTimes(request, request.tzOffsetMin ?? processOffsetMin(now), now);
   const isTour = request.mode === 'tour';
   const radiusMeters =
     overrides?.radiusMeters ??
     (isTour ? tourRadiusMeters(request.availableMinutes) : searchRadiusMeters(request.mobility, request.availableMinutes));
+  // Die Vorhersage muss bis zum Ende des Plans reichen – auch wenn er erst
+  // morgen Nachmittag stattfindet.
+  const stunden = Math.min(
+    48,
+    Math.max(24, Math.ceil((vorlaeufig.latestEnd.getTime() - now.getTime()) / 3_600_000) + 2),
+  );
 
   // Parallel laden – Geschwindigkeit ist hier das Feature.
   // Bei Touren kommen die Sehenswürdigkeiten als eigene Abfrage dazu; die
@@ -75,7 +87,7 @@ export async function createPlanContext(
     providers.places.search({
       center: request.origin,
       radiusMeters,
-      openAtISO: start.toISOString(),
+      openAtISO: vorlaeufig.start.toISOString(),
       limit: 400,
       locale: request.language,
     }),
@@ -83,12 +95,12 @@ export async function createPlanContext(
       .search({
         center: request.origin,
         radiusMeters,
-        fromISO: start.toISOString(),
-        toISO: new Date(start.getTime() + request.availableMinutes * 60_000).toISOString(),
+        fromISO: vorlaeufig.start.toISOString(),
+        toISO: vorlaeufig.latestEnd.toISOString(),
         limit: 5,
       })
       .catch(() => [] as Place[]),
-    providers.weather.forecast(request.origin, 24),
+    providers.weather.forecast(request.origin, stunden),
     isTour
       ? providers.places
           .search({
@@ -105,17 +117,28 @@ export async function createPlanContext(
       : Promise.resolve(undefined),
   ]);
 
-  const latestEnd = computeLatestEnd(request, start);
-
   // Ortszeit: bevorzugt vom Wetterdienst (kennt die Zeitzone des Ortes),
   // sonst vom Gerät des Nutzers, zuletzt vom Server.
   const tzOffsetMin =
     weather.utcOffsetSeconds !== undefined
       ? Math.round(weather.utcOffsetSeconds / 60)
-      : (request.tzOffsetMin ?? processOffsetMin(start));
+      : (request.tzOffsetMin ?? processOffsetMin(vorlaeufig.start));
+
+  const { start, homeBy, latestEnd } = resolveTimes(request, tzOffsetMin, now);
+
+  // Ab hier gelten nur noch feste Zeitpunkte. Ersetzen und Verschieben
+  // arbeiten später mit genau diesen Werten weiter – eine "14:30" darf beim
+  // Öffnen am nächsten Tag nicht plötzlich auf übermorgen springen.
+  const resolved: PlanRequest = {
+    ...request,
+    startISO: start.toISOString(),
+    mustBeHomeByISO: homeBy?.toISOString(),
+    startLocal: undefined,
+    homeByLocal: undefined,
+  };
 
   return {
-    request,
+    request: resolved,
     preferences,
     pool: [...places, ...events],
     weather,
@@ -141,11 +164,56 @@ function tourRadiusMeters(availableMinutes: number): number {
   return 2500;
 }
 
-function computeLatestEnd(request: PlanRequest, start: Date): Date {
+/**
+ * Start, Heimkehr und spätestes Ende als feste Zeitpunkte.
+ *
+ * Uhrzeiten wie "14:30" meinen die Ortszeit des Standorts, nicht die des
+ * Servers (UTC) und nicht zwingend die des Geräts. Liegt die Uhrzeit heute
+ * schon zurück, ist morgen gemeint – bis auf zehn Minuten Kulanz, dann geht
+ * es eben jetzt los.
+ */
+export function resolveTimes(
+  request: PlanRequest,
+  offsetMin: number,
+  now = new Date(),
+): { start: Date; homeBy?: Date; latestEnd: Date } {
+  const gewuenscht = parseClock(request.startLocal);
+  let start: Date;
+  if (gewuenscht !== null) {
+    start = nextLocalTime(gewuenscht, now, offsetMin, 10);
+    if (start < now) start = roundUpToFive(now);
+  } else {
+    start = roundUpToFive(new Date(request.startISO));
+  }
+
+  const heim = parseClock(request.homeByLocal);
+  const homeBy =
+    heim !== null
+      ? nextLocalTime(heim, new Date(start.getTime() + 60_000), offsetMin)
+      : request.mustBeHomeByISO
+        ? new Date(request.mustBeHomeByISO)
+        : undefined;
+
   const byBudget = new Date(start.getTime() + request.availableMinutes * 60_000);
-  if (!request.mustBeHomeByISO) return byBudget;
-  const home = new Date(request.mustBeHomeByISO);
-  return home < byBudget ? home : byBudget;
+  const latestEnd = homeBy && homeBy < byBudget ? homeBy : byBudget;
+  return { start, homeBy, latestEnd };
+}
+
+/**
+ * Weg nach Hause von einem Ort aus – nur, wenn eine Heimkehrzeit gesetzt ist.
+ * Geschätzt; echtes Routing kommt erst für den fertigen Plan.
+ */
+export function homeLeg(
+  ctx: PlanContext,
+  from: Coordinates,
+): { durationMin: number; distanceMeters: number } | null {
+  if (!ctx.request.mustBeHomeByISO) return null;
+  const home = ctx.request.homeLocation ?? ctx.request.origin;
+  const distance = haversineMeters(from, home);
+  return {
+    distanceMeters: Math.round(distance),
+    durationMin: distance < 40 ? 0 : estimateTravelMinutes(distance, ctx.request.mobility),
+  };
 }
 
 type BuildResult = {
@@ -237,6 +305,21 @@ function pickForSlot(input: PickInput): Picked | null {
   return relaxed;
 }
 
+/** Arten, bei denen ein kürzerer Besuch dasselbe Erlebnis ist. */
+const KUERZBAR = new Set<Category>(['cafe', 'food', 'nature', 'culture', 'bar', 'shopping']);
+
+/**
+ * Bei knapper Zeit darf ein Besuch kürzer sein als üblich – ein Kaffee in 35
+ * statt 50 Minuten ist immer noch ein Kaffee. Ein Kinofilm dagegen nicht.
+ * Nie unter 30 Minuten und nie unter zwei Drittel der üblichen Dauer.
+ */
+function kuerzerWennKnapp(place: Place, freiMin: number): number {
+  const ueblich = place.typicalDurationMin;
+  if (freiMin >= ueblich || !KUERZBAR.has(place.category)) return ueblich;
+  const kuerzer = Math.floor(freiMin / 5) * 5;
+  return kuerzer >= Math.max(30, Math.ceil(ueblich * 0.66)) ? kuerzer : ueblich;
+}
+
 /**
  * Harte Regeln gegen Wiederholung.
  *
@@ -272,7 +355,13 @@ function pickFromPool(input: PickInput, roles: Category[] | undefined): Picked |
     const travelMin =
       distanceMeters < 40 ? 0 : estimateTravelMinutes(distanceMeters, ctx.request.mobility);
     const startAt = roundToFive(new Date(cursor.getTime() + travelMin * 60_000));
-    const durationMin = place.typicalDurationMin;
+    // Mit Heimkehrzeit muss nach JEDEM Ort der Weg nach Hause noch passen –
+    // jeder kann der letzte sein, wenn danach nichts mehr offen hat.
+    const heim = homeLeg(ctx, place.location);
+    const durationMin = kuerzerWennKnapp(
+      place,
+      (ctx.latestEnd.getTime() - startAt.getTime()) / 60_000 - (heim ? heim.durationMin : input.reserveMinutes),
+    );
     const startISO = startAt.toISOString();
     const weatherAtStart = weatherAt(ctx.weather, startISO);
 
@@ -284,7 +373,7 @@ function pickFromPool(input: PickInput, roles: Category[] | undefined): Picked |
       distanceMeters,
       spentMin,
       weatherAtStart,
-      reserveMinutes: input.reserveMinutes,
+      reserveMinutes: heim ? heim.durationMin : input.reserveMinutes,
     });
     if (!filter.ok) continue;
 
@@ -443,6 +532,25 @@ export function assemblePlan(
   const cost = aggregateCost(steps.map((s) => s.price));
   const isTour = ctx.request.mode === 'tour';
 
+  // Abfahrt: die gewählte Startzeit. Hat die Engine den Beginn verschoben
+  // (früh am Morgen hat nichts offen), ist es der tatsächliche Aufbruch.
+  const aufbruch = new Date(startISO).getTime() - steps[0].travelFromPrevious.durationMin * 60_000;
+  const departISO = (
+    aufbruch - ctx.start.getTime() > 15 * 60_000
+      ? new Date(Math.floor(aufbruch / 300_000) * 300_000)
+      : ctx.start
+  ).toISOString();
+
+  const heim = homeLeg(ctx, steps[steps.length - 1].place.location);
+  const returnHome = heim
+    ? {
+        ...heim,
+        estimated: true,
+        arriveISO: new Date(new Date(endISO).getTime() + heim.durationMin * 60_000).toISOString(),
+      }
+    : undefined;
+  const fertig = returnHome?.arriveISO ?? endISO;
+
   return {
     id: existing?.id ?? shortId(10),
     shareCode: existing?.shareCode ?? shortId(6),
@@ -453,13 +561,18 @@ export function assemblePlan(
     steps,
     startISO,
     endISO,
+    departISO,
+    returnHome,
+    // Von der Abfahrt bis zum Ende – mit Heimkehrzeit bis zur Ankunft zuhause.
     totalDurationMin: Math.round(
-      (new Date(endISO).getTime() - new Date(startISO).getTime()) / 60000,
+      (new Date(fertig).getTime() - new Date(departISO).getTime()) / 60000,
     ),
     cost,
     currency: ctx.request.currency,
     request: ctx.request,
-    weatherAtCreation: ctx.weather.now ?? null,
+    // Das Wetter zur Startzeit – bei einem Plan für heute Abend zählt nicht
+    // der Regen von jetzt.
+    weatherAtCreation: weatherAt(ctx.weather, departISO) ?? ctx.weather.now ?? null,
     createdAtISO: existing?.createdAtISO ?? new Date().toISOString(),
     notes: buildNotes(ctx, steps, droppedSlots),
     meetingPoint: existing?.meetingPoint,
@@ -517,6 +630,15 @@ export async function refinePlanRouting(
     queries.push({ from, to: step.place.location, mode: ctx.request.mobility });
     from = step.place.location;
   }
+  // Mit Heimkehrzeit wird der Rückweg gleich mitgeroutet.
+  const mitRueckweg = Boolean(ctx.request.mustBeHomeByISO);
+  if (mitRueckweg) {
+    queries.push({
+      from,
+      to: ctx.request.homeLocation ?? ctx.request.origin,
+      mode: ctx.request.mobility,
+    });
+  }
 
   let legs;
   try {
@@ -552,18 +674,20 @@ export async function refinePlanRouting(
   }
 
   const lastStep = steps[steps.length - 1];
-  const reserve = reserveMinutesFor(ctx, true, lastStep.place.location);
+  const rueckweg = mitRueckweg ? legs[plan.steps.length] : undefined;
+  const reserve = rueckweg ? rueckweg.durationMin : reserveMinutesFor(ctx, true, lastStep.place.location);
   const finish = new Date(new Date(lastStep.endISO).getTime() + reserve * 60_000);
-  if (finish > ctx.latestEnd) return plan;
 
-  for (const step of steps) {
-    if (!step.place.openingHours) continue;
-    if (!isOpenDuring(step.place.openingHours, new Date(step.startISO), step.durationMin, ctx.tzOffsetMin)) {
-      return plan;
-    }
-  }
+  const zeitplanHaelt =
+    finish <= ctx.latestEnd &&
+    steps.every(
+      (step) =>
+        !step.place.openingHours ||
+        isOpenDuring(step.place.openingHours, new Date(step.startISO), step.durationMin, ctx.tzOffsetMin),
+    );
+  if (!zeitplanHaelt) return echteWegeImAltenZeitplan(plan, legs, ctx);
 
-  return assemblePlan(ctx, steps, plan.variant, 0, {
+  const refined = assemblePlan(ctx, steps, plan.variant, 0, {
     id: plan.id,
     shareCode: plan.shareCode,
     participants: plan.participants,
@@ -571,6 +695,83 @@ export async function refinePlanRouting(
     createdAtISO: plan.createdAtISO,
     siblings: plan.siblings,
   });
+  // Hinweise, die nicht aus den Stationen folgen (Verschiebung, Heimkehr),
+  // gehen beim Neuaufbau sonst verloren.
+  refined.notes = mergeNotes(plan.notes, refined.notes);
+  if (rueckweg && refined.returnHome) {
+    refined.returnHome = {
+      durationMin: rueckweg.durationMin,
+      distanceMeters: rueckweg.distanceMeters,
+      estimated: rueckweg.estimated,
+      geometry: rueckweg.geometry,
+      arriveISO: new Date(new Date(lastStep.endISO).getTime() + rueckweg.durationMin * 60_000).toISOString(),
+    };
+    refined.totalDurationMin = Math.round(
+      (new Date(refined.returnHome.arriveISO).getTime() - new Date(refined.departISO ?? refined.startISO).getTime()) / 60000,
+    );
+  }
+  return refined;
+}
+
+/**
+ * Würde der echte Weg den Zeitplan sprengen, bleiben die Zeiten, wie sie sind.
+ * Echte Wege (mit Geometrie für die Karte) werden trotzdem übernommen – aber
+ * nur dort, wo sie in die vorhandene Lücke passen. Überall sonst bleibt die
+ * Schätzung stehen und ist als solche gekennzeichnet.
+ */
+function echteWegeImAltenZeitplan(plan: Plan, legs: TravelLeg[], ctx: PlanContext): Plan {
+  let vorher = new Date(ctx.start).getTime();
+  const steps = plan.steps.map((step, i) => {
+    const leg = legs[i];
+    const passt =
+      leg && !leg.estimated && vorher + leg.durationMin * 60_000 <= new Date(step.startISO).getTime();
+    vorher = new Date(step.endISO).getTime();
+    return passt ? { ...step, travelFromPrevious: leg } : step;
+  });
+  return { ...plan, steps };
+}
+
+/** Alte Hinweise behalten, die der Neuaufbau nicht selbst erzeugt – ohne Dopplungen. */
+function mergeNotes(alt: PlanNote[], neu: PlanNote[]): PlanNote[] {
+  const texte = new Set(neu.map((n) => n.text));
+  const behalten = alt.filter((n) => (n.kind === 'time' || n.kind === 'info') && !texte.has(n.text));
+  return [...behalten, ...neu];
+}
+
+/**
+ * Passt der gewünschte Umfang nicht bis zur Heimkehrzeit, sagt der Plan das
+ * offen: "Dafür passen 3 Stationen – 5 würden zu spät enden." Dafür wird
+ * probeweise ohne Heimkehrzeit geplant und verglichen.
+ */
+export function homeByNote(
+  ctx: PlanContext,
+  plan: Plan,
+  bauen: (c: PlanContext) => Plan | null,
+): PlanNote | null {
+  const homeBy = ctx.request.mustBeHomeByISO;
+  if (!homeBy) return null;
+  const byBudget = new Date(ctx.start.getTime() + ctx.request.availableMinutes * 60_000);
+  if (new Date(homeBy).getTime() >= byBudget.getTime()) return null;
+
+  const ohne = bauen({
+    ...ctx,
+    latestEnd: byBudget,
+    request: { ...ctx.request, mustBeHomeByISO: undefined },
+  });
+  if (!ohne) return null;
+
+  const zaehlen = (p: Plan) =>
+    p.mode === 'tour' ? p.steps.filter((s) => s.place.themes?.length).length : p.steps.length;
+  const passen = zaehlen(plan);
+  const gewuenscht = zaehlen(ohne);
+  if (gewuenscht <= passen) return null;
+
+  const uhr = formatClock(homeBy, 'de', ctx.tzOffsetMin);
+  const wort = passen === 1 ? 'Station' : 'Stationen';
+  return {
+    kind: 'time',
+    text: `Bis ${uhr} Uhr zuhause: Dafür passen ${passen} ${wort} – ${gewuenscht} würden zu spät enden.`,
+  };
 }
 
 export type ReplaceHint = 'any' | 'cheaper' | 'faster' | 'romantic' | 'action' | 'indoor' | 'new';

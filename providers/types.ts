@@ -132,6 +132,8 @@ export type ParsedIntent = {
   focusCategory?: Category;
   /** "bis 22 Uhr zuhause" → Uhrzeit in Minuten seit Mitternacht. */
   homeByMinutes?: number;
+  /** "Wir starten um 14:30" → 870. */
+  startMinutes?: number;
   preferNovelty?: boolean;
   avoidOutdoor?: boolean;
   maxDistanceMeters?: number;

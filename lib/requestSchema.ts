@@ -36,6 +36,13 @@ function num(value: unknown): number | undefined {
   return typeof n === 'number' && Number.isFinite(n) ? n : undefined;
 }
 
+/** "14:30" – nur gültige Uhrzeiten, sonst nichts. */
+function clockOrUndefined(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
+  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : undefined;
+}
+
 function isoOrUndefined(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const date = new Date(value);
@@ -115,6 +122,8 @@ export function normalizePlanRequest(raw: unknown): PlanRequest {
     moods,
     mobility: pick<Mobility>(input.mobility, MOBILITIES, isTour ? 'walk' : 'transit'),
     mustBeHomeByISO: isoOrUndefined(input.mustBeHomeByISO),
+    startLocal: clockOrUndefined(input.startLocal),
+    homeByLocal: clockOrUndefined(input.homeByLocal),
     homeLocation:
       homeLat !== undefined && homeLon !== undefined
         ? { lat: homeLat, lon: homeLon }

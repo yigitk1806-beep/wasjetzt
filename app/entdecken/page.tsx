@@ -6,6 +6,16 @@ import { motion } from 'motion/react';
 import { PlanningOverlay } from '@/components/PlanningOverlay';
 import { LocationSheet } from '@/components/location/LocationSheet';
 import { MapPin } from '@/components/ui/icons';
+import {
+  TimeField,
+  clockFromMin,
+  jetztText,
+  minutesOf,
+  nextQuarter,
+  startLabel,
+  startMinutes,
+  useNowClock,
+} from '@/components/ui/TimeField';
 import { useLocation } from '@/hooks/useLocation';
 import { requestPlanStreamed, type PlanPhase } from '@/lib/planClient';
 import type { SightTheme } from '@/types/domain';
@@ -80,6 +90,21 @@ export default function EntdeckenPage() {
   const router = useRouter();
   const { location, setManual, requestDevice } = useLocation();
   const [minutes, setMinutes] = useState(210);
+  const [minutesTouched, setMinutesTouched] = useState(false);
+  const [startAt, setStartAt] = useState<string | null>(null);
+  const [homeBy, setHomeBy] = useState<string | null>(null);
+  const jetzt = useNowClock();
+
+  // Mit Heimkehrzeit passt sich die Dauer dem Fenster an – solange sie nicht
+  // selbst gewählt wurde.
+  const startMin = startMinutes(startAt, jetzt);
+  const fensterMin =
+    homeBy && startMin !== null ? (((minutesOf(homeBy) - startMin) % 1440) + 1440) % 1440 : null;
+  useEffect(() => {
+    if (fensterMin === null || minutesTouched) return;
+    const passend = [...DAUER].reverse().find((d) => d.minutes <= fensterMin) ?? DAUER[0];
+    setMinutes(passend.minutes);
+  }, [fensterMin, minutesTouched]);
   const [busy, setBusy] = useState<string | null>(null);
   const [phase, setPhase] = useState<PlanPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +148,8 @@ export default function EntdeckenPage() {
           originLabel: location.label,
           startISO: new Date().toISOString(),
           availableMinutes: minutes,
+          startLocal: startAt ?? undefined,
+          homeByLocal: homeBy ?? undefined,
           mode: 'tour',
           mobility: 'walk',
           interests: auswahl.interests,
@@ -208,7 +235,10 @@ export default function EntdeckenPage() {
                 type="button"
                 role="radio"
                 aria-checked={aktiv}
-                onClick={() => setMinutes(option.minutes)}
+                onClick={() => {
+                  setMinutes(option.minutes);
+                  setMinutesTouched(true);
+                }}
                 className={[
                   'tap h-10 rounded-xl text-[0.8rem] font-semibold transition-colors',
                   aktiv ? 'bg-canvas-raised text-ink shadow-card' : 'text-ink-muted',
@@ -218,6 +248,36 @@ export default function EntdeckenPage() {
               </button>
             );
           })}
+        </div>
+
+        {/* Start und Heimkehr: vorausgewählt „jetzt" und „offen", ein Tipp
+            öffnet den Zeitpicker des Handys. */}
+        <div className="-mt-3 flex flex-wrap gap-2">
+          <TimeField
+            compact
+            icon="🕐"
+            label="Wann starten?"
+            value={startAt}
+            emptyText={jetztText(jetzt, 'Start jetzt')}
+            valueText={(v) => `Start ${startLabel(v).replace(' · ', ' ')}`}
+            actionText="Ändern"
+            resetText="Jetzt"
+            pickerDefault={nextQuarter(jetzt)}
+            onChange={setStartAt}
+          />
+          <TimeField
+            compact
+            icon="🏠"
+            label="Zuhause bis"
+            value={homeBy}
+            emptyText="Zuhause bis …"
+            valueText={(v) => `Zuhause ${v}`}
+            actionText="Festlegen"
+            resetText="Keine"
+            pickerDefault={clockFromMin(Math.round(((startMin ?? 720) + minutes + 30) / 60) * 60)}
+            commitOnBlur
+            onChange={setHomeBy}
+          />
         </div>
 
         <div className="space-y-3">
@@ -276,8 +336,9 @@ export default function EntdeckenPage() {
         ) : null}
 
         <p className="px-1 text-[0.78rem] leading-relaxed text-ink-faint">
-          Die Tour beginnt jetzt an deinem Standort und läuft zu Fuß. Öffnungszeiten, Wetter und
-          Tageslicht sind eingerechnet.
+          Die Tour beginnt {startAt ? `um ${startAt} Uhr` : 'jetzt'} an deinem Standort und läuft zu
+          Fuß. Öffnungszeiten, Wetter und Tageslicht sind eingerechnet
+          {homeBy ? `, der Rückweg bis ${homeBy} Uhr auch` : ''}.
         </p>
       </main>
 

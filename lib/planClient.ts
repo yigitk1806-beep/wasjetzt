@@ -16,6 +16,10 @@ export type PlanRequestInput = {
   moods?: Mood[];
   mobility?: Mobility;
   mustBeHomeByISO?: string;
+  /** Startzeit als Ortszeit, z. B. "14:30". Fehlt = jetzt. */
+  startLocal?: string;
+  /** Heimkehrzeit als Ortszeit, z. B. "21:00". */
+  homeByLocal?: string;
   singleActivity?: boolean;
   preferNovelty?: boolean;
   focusCategory?: Category;
@@ -129,16 +133,7 @@ export async function requestPlan(input: PlanRequestInput): Promise<PlanResponse
     const res = await fetch('/api/plan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...input,
-        language: preferences.language,
-        age: preferences.age,
-        homeLat: preferences.homeLocation?.lat,
-        homeLon: preferences.homeLocation?.lon,
-        party: input.party ?? preferences.defaultParty,
-        mobility: input.mobility ?? preferences.defaultMobility,
-        preferences,
-      }),
+      body: JSON.stringify(bodyFor(input, preferences)),
     });
 
     const data = (await res.json()) as PlanResponse;
@@ -161,6 +156,27 @@ export async function replacePlanStep(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stepId, hint, preferences: loadPreferences() }),
+    });
+    return (await res.json()) as { plan?: Plan; error?: string; message?: string };
+  } catch {
+    return { error: 'Keine Verbindung.' };
+  }
+}
+
+/**
+ * Legt einen bestehenden Plan auf eine neue Startzeit. `null` heißt jetzt.
+ * `homeByLocal` weglassen = bisherige Heimkehrzeit behalten, `null` = keine.
+ */
+export async function retimePlan(
+  planId: string,
+  startLocal: string | null,
+  homeByLocal: string | null | undefined,
+): Promise<{ plan?: Plan; error?: string; message?: string }> {
+  try {
+    const res = await fetch(`/api/plan/${planId}/retime`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ startLocal, homeByLocal, preferences: loadPreferences() }),
     });
     return (await res.json()) as { plan?: Plan; error?: string; message?: string };
   } catch {

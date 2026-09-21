@@ -29,6 +29,8 @@ type Props = {
   highlight?: boolean;
   onReplace: (step: PlanStep) => void;
   index: number;
+  /** Nur bei der ersten Station: wann es losgeht. */
+  departISO?: string;
 };
 
 /** Eine Station der Tour: Eindruck, Eckdaten, zwei Aktionen. */
@@ -43,21 +45,33 @@ export function TourStop({
   highlight = false,
   onReplace,
   index,
+  departISO,
 }: Props) {
   const travel = step.travelFromPrevious;
 
   return (
     <li className="relative">
-      {/* Weg von der vorigen Station */}
-      {travel.durationMin > 0 ? (
+      {/* Weg von der vorigen Station – vor der ersten mit der Startzeit */}
+      {travel.durationMin > 0 || departISO ? (
         <div className="relative flex items-center gap-2 py-2.5 pl-12 text-[0.78rem] text-ink-muted">
-          <Linie />
-          <Footprints size={15} className="shrink-0 text-ink-faint" />
-          <span>
-            {travel.estimated ? 'ca. ' : ''}
-            {formatDuration(travel.durationMin)} {UNTERWEGS[travel.mode]} ·{' '}
-            {formatDistance(travel.distanceMeters)}
-          </span>
+          {departISO ? null : <Linie />}
+          {departISO ? (
+            <span className="font-semibold tabular-nums text-ink-soft">
+              Los um {formatClock(departISO, 'de', tzOffsetMin)} ·
+            </span>
+          ) : null}
+          {travel.durationMin > 0 ? (
+            <>
+              <Footprints size={15} className="shrink-0 text-ink-faint" />
+              <span>
+                {travel.estimated ? 'ca. ' : ''}
+                {formatDuration(travel.durationMin)} {UNTERWEGS[travel.mode]} ·{' '}
+                {formatDistance(travel.distanceMeters)}
+              </span>
+            </>
+          ) : (
+            <span>direkt hier</span>
+          )}
         </div>
       ) : null}
 
@@ -150,7 +164,9 @@ function Station({ step, currency, tzOffsetMin, onReplace, highlight, index = 0 
       <div className="p-4">
         <div className="flex items-center gap-1.5 text-[0.78rem] font-medium text-ink-muted">
           <Clock size={14} className="text-ink-faint" />
-          <span className="tabular-nums">{formatClock(step.startISO, 'de', tzOffsetMin)}</span>
+          <span className="font-semibold tabular-nums text-ink-soft">
+            {formatClock(step.startISO, 'de', tzOffsetMin)}–{formatClock(step.endISO, 'de', tzOffsetMin)}
+          </span>
           <span className="text-ink-faint">·</span>
           <span>{formatDuration(step.durationMin)} Aufenthalt</span>
         </div>
@@ -314,8 +330,10 @@ function Pause({ step, currency, tzOffsetMin, onReplace, highlight }: StationPro
     >
       <div className="min-w-0 flex-1">
         <p className="text-[0.76rem] font-medium text-ink-muted">
-          <span className="tabular-nums">{formatClock(step.startISO, 'de', tzOffsetMin)}</span> ·{' '}
-          {step.reason.replace(/\.$/, '')}
+          <span className="tabular-nums">
+            {formatClock(step.startISO, 'de', tzOffsetMin)}–{formatClock(step.endISO, 'de', tzOffsetMin)}
+          </span>{' '}
+          · {step.reason.replace(/\.$/, '')}
         </p>
         <p className="truncate text-[0.95rem] font-semibold">{step.place.name}</p>
         <p className="text-[0.78rem] text-ink-muted">
