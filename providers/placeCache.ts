@@ -39,3 +39,35 @@ export class InMemoryPlaceCache implements PlaceCacheStore {
     }
   }
 }
+
+/**
+ * Zwei Ebenen: erst der Arbeitsspeicher der Instanz, dann der geteilte
+ * Speicher dahinter.
+ *
+ * Eine warme Instanz antwortet so ohne Datenbankzugriff, eine kalte liest
+ * genau einmal aus der Datenbank und merkt sich das Ergebnis. Ohne die erste
+ * Ebene müsste jede Planung rund ein halbes Megabyte aus der Datenbank laden.
+ */
+export class LayeredPlaceCache implements PlaceCacheStore {
+  readonly id: string;
+
+  constructor(
+    private readonly fast: PlaceCacheStore,
+    private readonly shared: PlaceCacheStore,
+  ) {
+    this.id = `${fast.id}+${shared.id}`;
+  }
+
+  async get(cellKey: string, maxAgeMs: number): Promise<Place[] | null> {
+    const local = await this.fast.get(cellKey, maxAgeMs);
+    if (local) return local;
+
+    const remote = await this.shared.get(cellKey, maxAgeMs);
+    if (remote) await this.fast.set(cellKey, remote);
+    return remote;
+  }
+
+  async set(cellKey: string, places: Place[]): Promise<void> {
+    await Promise.all([this.fast.set(cellKey, places), this.shared.set(cellKey, places)]);
+  }
+}

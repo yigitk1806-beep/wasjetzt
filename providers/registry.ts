@@ -1,6 +1,6 @@
 import { PrismaPlaceCache } from '@/db/prismaPlaceCache';
 import { FallbackPlaceProvider } from './fallbackPlaceProvider';
-import { InMemoryPlaceCache, type PlaceCacheStore } from './placeCache';
+import { InMemoryPlaceCache, LayeredPlaceCache, type PlaceCacheStore } from './placeCache';
 import { MockEventProvider } from './mock/mockEventProvider';
 import { MockPlaceProvider } from './mock/mockPlaceProvider';
 import { OverpassPlaceProvider } from './osm/overpassPlaceProvider';
@@ -44,7 +44,9 @@ const globalForProviders = globalThis as unknown as {
  * bleibt er im Arbeitsspeicher – lokal reicht das, serverlos nicht.
  */
 function placeCache(): PlaceCacheStore {
-  return process.env.DATABASE_URL ? new PrismaPlaceCache() : new InMemoryPlaceCache();
+  return process.env.DATABASE_URL
+    ? new LayeredPlaceCache(new InMemoryPlaceCache(), new PrismaPlaceCache())
+    : new InMemoryPlaceCache();
 }
 
 export function getProviders(): ProviderSet {

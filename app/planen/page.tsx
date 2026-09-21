@@ -5,11 +5,12 @@ import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
-import { ThinkingOverlay } from '@/components/ThinkingOverlay';
+import { PlanningOverlay } from '@/components/PlanningOverlay';
+import { ArrowRight } from '@/components/ui/icons';
 import { useLocale } from '@/components/LocaleProvider';
 import { useLocation } from '@/hooks/useLocation';
 import { loadPreferences } from '@/lib/clientStore';
-import { requestPlan } from '@/lib/planClient';
+import { requestPlanStreamed, type PlanPhase } from '@/lib/planClient';
 import type { BudgetPreset, Mobility, Mood, Party } from '@/types/domain';
 
 const PARTIES: Array<{ value: Party; emoji: string; label: string }> = [
@@ -20,9 +21,9 @@ const PARTIES: Array<{ value: Party; emoji: string; label: string }> = [
 ];
 
 const TIMES: Array<{ minutes: number; label: string }> = [
-  { minutes: 90, label: '1–2 h' },
-  { minutes: 180, label: '2–4 h' },
-  { minutes: 300, label: '4–6 h' },
+  { minutes: 90, label: '1–2 Std.' },
+  { minutes: 180, label: '2–4 Std.' },
+  { minutes: 300, label: '4–6 Std.' },
   { minutes: 480, label: 'Ganzer Tag' },
 ];
 
@@ -48,7 +49,7 @@ const MOODS: Array<{ value: Mood; emoji: string; label: string }> = [
 const MOBILITY: Array<{ value: Mobility; emoji: string; label: string }> = [
   { value: 'walk', emoji: '🚶', label: 'Fuß' },
   { value: 'bike', emoji: '🚲', label: 'Rad' },
-  { value: 'transit', emoji: '🚇', label: 'ÖPNV' },
+  { value: 'transit', emoji: '🚇', label: 'Bus & Bahn' },
   { value: 'car', emoji: '🚗', label: 'Auto' },
 ];
 
@@ -68,6 +69,7 @@ export default function BuildPlanPage() {
   const [singleActivity, setSingleActivity] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<PlanPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -137,9 +139,10 @@ export default function BuildPlanPage() {
       return;
     }
     setBusy(true);
+    setPhase(null);
     setError(null);
 
-    const response = await requestPlan({
+    const response = await requestPlanStreamed({
       lat: location.location.lat,
       lon: location.location.lon,
       originLabel: location.label,
@@ -152,13 +155,14 @@ export default function BuildPlanPage() {
       mustBeHomeByISO,
       singleActivity,
       rawText: rawText.trim() || undefined,
-    });
+    }, setPhase);
 
     if (response.plan) {
       router.push(`/plan/${response.plan.id}`);
       return;
     }
     setBusy(false);
+    setPhase(null);
     setError(response.message ?? response.error ?? t.plan.empty);
   }
 
@@ -184,7 +188,7 @@ export default function BuildPlanPage() {
         <span className="text-[0.95rem] font-semibold text-ink-soft">{t.build.title}</span>
       </header>
 
-      <main className="shell space-y-6 pb-32 pt-5">
+      <main className="shell space-y-7 pb-40 pt-5">
         {/* Freitext zuerst – das ist der schnellste Weg. */}
         <section className="space-y-2">
           <label htmlFor="freetext" className="text-[0.95rem] font-bold tracking-tight">
@@ -364,16 +368,25 @@ export default function BuildPlanPage() {
         ) : null}
       </main>
 
-      {/* Eine Hauptaktion, immer erreichbar. */}
-      <div className="fixed inset-x-0 bottom-0 z-30 bg-gradient-to-t from-canvas via-canvas/95 to-transparent pt-6">
+      {/* Die Hauptaktion. Immer erreichbar, immer die stärkste Fläche auf
+          dem Bildschirm – der weiche Verlauf darüber trennt sie sichtbar
+          vom letzten Abschnitt, statt sie daran kleben zu lassen. */}
+      <div className="fixed inset-x-0 bottom-0 z-30 bg-gradient-to-t from-canvas via-canvas/96 to-transparent pb-1 pt-10">
         <div className="shell safe-bottom">
-          <Button size="lg" full loading={busy} onClick={() => void submit()}>
-            {busy ? t.build.working : t.build.submit}
+          <Button
+            size="lg"
+            full
+            loading={busy}
+            loadingLabel="Plan wird erstellt"
+            trailingIcon={<ArrowRight size={19} className="opacity-90" />}
+            onClick={() => void submit()}
+          >
+            {t.build.submit}
           </Button>
         </div>
       </div>
 
-      <ThinkingOverlay open={busy} />
+      <PlanningOverlay open={busy} phase={phase} />
     </>
   );
 }

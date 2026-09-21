@@ -34,6 +34,86 @@ export type PlanResponse = {
   message?: string;
 };
 
+/** Abschnitte der Planung – die Ladeanzeige folgt diesen Meldungen. */
+export type PlanPhase = 'orte' | 'wetter' | 'wege' | 'plan';
+
+/**
+ * Planung mit Fortschrittsmeldung.
+ *
+ * Liest den Ereignisstrom der Plan-Route und meldet jeden Abschnitt, sobald
+ * der Server ihn tatsächlich erreicht – die Ladeanzeige zeigt damit echten
+ * Fortschritt und keine erfundene Zeitleiste.
+ *
+ * Bricht der Strom ab (alte Zwischenspeicher, Proxys ohne Stream-Unterstützung),
+ * wird stillschweigend auf die gewöhnliche Anfrage zurückgefallen.
+ */
+export async function requestPlanStreamed(
+  input: PlanRequestInput,
+  onPhase: (phase: PlanPhase) => void,
+): Promise<PlanResponse> {
+  const preferences = loadPreferences();
+
+  try {
+    const res = await fetch('/api/plan?stream=1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyFor(input, preferences)),
+    });
+
+    if (!res.ok || !res.body) return requestPlan(input);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let puffer = '';
+    let ergebnis: PlanResponse | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      puffer += decoder.decode(value, { stream: true });
+
+      // Ereignisse sind durch eine Leerzeile getrennt.
+      const bloecke = puffer.split('\n\n');
+      puffer = bloecke.pop() ?? '';
+
+      for (const block of bloecke) {
+        const typ = block.match(/^event: (.+)$/m)?.[1];
+        const daten = block.match(/^data: (.+)$/m)?.[1];
+        if (!typ || !daten) continue;
+
+        if (typ === 'phase') {
+          onPhase(JSON.parse(daten).phase as PlanPhase);
+        } else if (typ === 'result') {
+          const r = JSON.parse(daten);
+          ergebnis = r.ok
+            ? { plan: r.plan, variants: r.variants, understood: r.understood }
+            : { error: r.error, message: r.message, understood: r.understood };
+        }
+      }
+    }
+
+    return ergebnis ?? { error: 'Die Planung wurde unterbrochen.' };
+  } catch {
+    return requestPlan(input);
+  }
+}
+
+function bodyFor(
+  input: PlanRequestInput,
+  preferences: ReturnType<typeof loadPreferences>,
+): Record<string, unknown> {
+  return {
+    ...input,
+    language: preferences.language,
+    age: preferences.age,
+    homeLat: preferences.homeLocation?.lat,
+    homeLon: preferences.homeLocation?.lon,
+    party: input.party ?? preferences.defaultParty,
+    mobility: input.mobility ?? preferences.defaultMobility,
+    preferences,
+  };
+}
+
 /** Einziger Einstiegspunkt der UI in die Planung. */
 export async function requestPlan(input: PlanRequestInput): Promise<PlanResponse> {
   const preferences = loadPreferences();

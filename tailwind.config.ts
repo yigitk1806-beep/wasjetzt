@@ -71,6 +71,12 @@ const config: Config = {
         card: '0 1px 2px rgba(23,20,18,0.04), 0 8px 24px -12px rgba(23,20,18,0.18)',
         lift: '0 2px 6px rgba(23,20,18,0.06), 0 18px 40px -18px rgba(23,20,18,0.28)',
         press: 'inset 0 1px 2px rgba(23,20,18,0.08)',
+        // Der Schatten der Hauptaktion trägt einen Hauch der Buttonfarbe –
+        // das wirkt warm statt grau, ohne zu leuchten.
+        brand:
+          '0 6px 16px -6px rgba(241,92,28,0.42), 0 2px 5px -2px rgba(241,92,28,0.22)',
+        'brand-lg':
+          '0 14px 30px -10px rgba(241,92,28,0.5), 0 4px 10px -4px rgba(241,92,28,0.24)',
       },
       keyframes: {
         'fade-up': {
@@ -84,11 +90,16 @@ const config: Config = {
           '0%, 100%': { transform: 'scale(1)', opacity: '0.7' },
           '50%': { transform: 'scale(1.06)', opacity: '1' },
         },
+        dot: {
+          '0%, 70%, 100%': { opacity: '0.35', transform: 'translateY(0)' },
+          '35%': { opacity: '1', transform: 'translateY(-3px)' },
+        },
       },
       animation: {
         'fade-up': 'fade-up 0.45s cubic-bezier(0.22,1,0.36,1) both',
         shimmer: 'shimmer 1.6s infinite',
         breathe: 'breathe 2.4s ease-in-out infinite',
+        dot: 'dot 1.2s ease-in-out infinite',
       },
     },
   },

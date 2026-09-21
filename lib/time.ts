@@ -19,12 +19,22 @@ export function formatClock(iso: string, locale = 'de'): string {
   });
 }
 
+/**
+ * Zeitdauer für die Oberfläche.
+ *
+ * Auf Deutsch immer "Std." und "Min." – nie "h" oder "min". Minutenzahlen über
+ * einer Stunde werden umgerechnet: 120 wird zu "2 Std.", nicht zu "120 Min.".
+ * Das ist reine Darstellung; gerechnet wird überall weiter in Minuten.
+ */
 export function formatDuration(minutes: number, locale = 'de'): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h === 0) return `${m} Min.`;
-  if (m === 0) return locale.startsWith('de') ? `${h} Std.` : `${h} h`;
-  return locale.startsWith('de') ? `${h} Std. ${m} Min.` : `${h} h ${m} min`;
+  const gerundet = Math.max(0, Math.round(minutes));
+  const h = Math.floor(gerundet / 60);
+  const m = gerundet % 60;
+  const deutsch = locale.startsWith('de');
+
+  if (h === 0) return deutsch ? `${m} Min.` : `${m} min`;
+  if (m === 0) return deutsch ? `${h} Std.` : `${h} h`;
+  return deutsch ? `${h} Std. ${m} Min.` : `${h} h ${m} min`;
 }
 
 export function weekdayOf(date: Date): Weekday {

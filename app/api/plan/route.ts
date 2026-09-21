@@ -9,14 +9,30 @@ import {
 import { variantByKey } from '@/engine/scoring';
 import { getProviders } from '@/providers/registry';
 import { normalizePlanRequest, normalizePreferences, RequestError } from '@/lib/requestSchema';
-import type { Mood } from '@/types/domain';
+import type { Mood, Plan } from '@/types/domain';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
+/**
+ * Abschnitte der Planung, in der Reihenfolge, in der sie tatsächlich laufen.
+ * Die Oberfläche zeigt damit echten Fortschritt statt einer geschätzten Dauer.
+ */
+export type PlanPhase = 'orte' | 'wetter' | 'wege' | 'plan';
+
+type PhaseReporter = (phase: PlanPhase) => void;
+
+type PipelineResult =
+  | { ok: true; plan: Plan; variants: Plan[]; understood: string[]; weatherSource: string }
+  | { ok: false; status: number; error: string; message?: string; understood?: string[] };
 
 /**
  * Erstellt einen Plan. Body: { ...PlanRequest-Felder, preferences?, variants?, surprise? }
- * Antwort: { plan, variants }
+ *
+ * Mit `?stream=1` kommt die Antwort als Ereignisstrom: erst Fortschritts-
+ * meldungen, dann das Ergebnis. Ohne den Parameter bleibt alles wie bisher –
+ * eine einzelne JSON-Antwort.
  */
 export async function POST(request: Request) {
   let body: unknown;
@@ -27,7 +43,64 @@ export async function POST(request: Request) {
   }
 
   const input = (body ?? {}) as Record<string, unknown>;
+  const streamen = new URL(request.url).searchParams.get('stream') === '1';
 
+  if (!streamen) {
+    const result = await runPipeline(input, () => undefined);
+    return antwort(result);
+  }
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (typ: string, daten: unknown) => {
+        controller.enqueue(encoder.encode(`event: ${typ}\ndata: ${JSON.stringify(daten)}\n\n`));
+      };
+
+      try {
+        const result = await runPipeline(input, (phase) => send('phase', { phase }));
+        send('result', result);
+      } catch (error) {
+        console.error('[api/plan] Strom abgebrochen', error);
+        send('result', { ok: false, status: 500, error: 'Die Planung ist fehlgeschlagen.' });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
+}
+
+function antwort(result: PipelineResult) {
+  if (!result.ok) {
+    return NextResponse.json(
+      { error: result.error, message: result.message, understood: result.understood },
+      { status: result.status },
+    );
+  }
+  return NextResponse.json({
+    plan: result.plan,
+    variants: result.variants,
+    understood: result.understood,
+    weatherSource: result.weatherSource,
+  });
+}
+
+/**
+ * Die eigentliche Planung. Unverändert gegenüber vorher – ergänzt nur um
+ * Meldungen, an welchem Abschnitt gerade gearbeitet wird.
+ */
+async function runPipeline(
+  input: Record<string, unknown>,
+  melde: PhaseReporter,
+): Promise<PipelineResult> {
   try {
     const providers = getProviders();
     const preferences = normalizePreferences(input.preferences);
@@ -62,60 +135,64 @@ export async function POST(request: Request) {
     }
 
     const planRequest = normalizePlanRequest(merged);
+
+    melde('orte');
     const ctx = await createPlanContext(planRequest, preferences, providers);
+    melde('wetter');
 
     const wantVariants = input.variants !== false;
-    const plans = wantVariants ? buildPlanVariants(ctx) : [buildPlan(ctx)].filter(Boolean);
+    const plans = (wantVariants ? buildPlanVariants(ctx) : [buildPlan(ctx)]).filter(
+      (p): p is Plan => Boolean(p),
+    );
 
-    if (!plans.length || !plans[0]) {
-      return NextResponse.json(
-        {
-          error: 'no-plan',
-          message: 'Dafür finde ich gerade nichts Passendes.',
-          understood,
-        },
-        { status: 200 },
-      );
+    if (plans.length === 0) {
+      return {
+        ok: false,
+        status: 200,
+        error: 'no-plan',
+        message: 'Dafür finde ich gerade nichts Passendes.',
+        understood,
+      };
     }
 
     // Jede Variante kennt ihre Geschwister, damit die UI ohne Neuplanung
     // umschalten kann.
-    const siblings = plans.filter(Boolean).map((plan) => ({
-      variant: plan!.variant,
-      id: plan!.id,
-      title: variantByKey(plan!.variant).title,
-      emoji: variantByKey(plan!.variant).emoji,
+    const siblings = plans.map((plan) => ({
+      variant: plan.variant,
+      id: plan.id,
+      title: variantByKey(plan.variant).title,
+      emoji: variantByKey(plan.variant).emoji,
     }));
-    for (const plan of plans) {
-      if (plan) plan.siblings = siblings;
-    }
+    for (const plan of plans) plan.siblings = siblings;
 
-    // Echte Reisezeiten für die tatsächlich gewählten Wege nachziehen.
+    melde('wege');
     const routed = await Promise.all(
-      plans.map((plan) => refinePlanRouting(ctx, plan!, providers.routing)),
+      plans.map((plan) => refinePlanRouting(ctx, plan, providers.routing)),
     );
 
+    melde('plan');
     const store = getPlanStore();
     // Der Speicher ergänzt beim Sichern das Ablaufdatum – deshalb wird mit
     // den gespeicherten Kopien geantwortet, nicht mit den Originalen.
     const saved = await Promise.all(routed.map((plan) => store.save(plan)));
 
-    return NextResponse.json({
+    return {
+      ok: true,
       plan: saved[0],
       variants: saved.slice(1),
       understood,
-      usesMockPlaces: providers.places.isMock,
       weatherSource: ctx.weather.source,
-    });
+    };
   } catch (error) {
     if (error instanceof RequestError) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return { ok: false, status: 400, error: error.message };
     }
     console.error('[api/plan] unerwarteter Fehler', error);
-    return NextResponse.json(
-      { error: 'Die Planung ist fehlgeschlagen. Versuch es gleich nochmal.' },
-      { status: 500 },
-    );
+    return {
+      ok: false,
+      status: 500,
+      error: 'Die Planung ist fehlgeschlagen. Versuch es gleich nochmal.',
+    };
   }
 }
 

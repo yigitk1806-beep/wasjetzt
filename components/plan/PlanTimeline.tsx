@@ -29,10 +29,12 @@ export function PlanTimeline({ steps, currency, onReplace, highlightIds = [] }: 
           {step.travelFromPrevious.durationMin > 0 ? (
             <div className="flex items-center gap-2 py-1.5 pl-[3.75rem] text-[0.76rem] text-ink-faint">
               <span aria-hidden>{MOBILITY_EMOJI[step.travelFromPrevious.mode]}</span>
-              {/* "ca." nur dort, wo die Zeit wirklich geschätzt ist. */}
+              {/* "ca." nur dort, wo die Zeit wirklich geschätzt ist.
+                  formatDuration macht aus 90 Minuten "1 Std. 30 Min." – in der
+                  Oberfläche steht nie eine reine Minutenzahl über einer Stunde. */}
               <span>
                 {step.travelFromPrevious.estimated ? 'ca. ' : ''}
-                {step.travelFromPrevious.durationMin} Min. ·{' '}
+                {formatDuration(step.travelFromPrevious.durationMin)} ·{' '}
                 {formatDistance(step.travelFromPrevious.distanceMeters)}
               </span>
             </div>

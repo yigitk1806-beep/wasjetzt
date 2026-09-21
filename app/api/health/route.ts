@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getPlanStore, isPersistent } from '@/db/planStore';
+import { PrismaPlaceCache } from '@/db/prismaPlaceCache';
 import { getProviders } from '@/providers/registry';
 import { shortId } from '@/lib/id';
 import type { Plan } from '@/types/domain';
@@ -17,11 +18,34 @@ export const dynamic = 'force-dynamic';
  *
  * Gibt bewusst keine Verbindungsdaten preis – nur Ja/Nein und die Fehlerart.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const checks: Record<string, unknown> = {
     databaseUrlGesetzt: isPersistent(),
     ortsquelle: getProviders().places.id,
   };
+
+  // Optional: Lesetest auf den geteilten Ortscache, z. B. ?cell=53.560:10.000
+  // Zeigt, ob eine vorgeladene Kachel von dieser Instanz aus gefunden wird
+  // und wie lange das dauert.
+  const cell = new URL(request.url).searchParams.get('cell');
+  if (cell && isPersistent()) {
+    const start = Date.now();
+    try {
+      const orte = await new PrismaPlaceCache().get(cell, 60 * 60 * 1000);
+      checks.ortscache = {
+        kachel: cell,
+        gefunden: Boolean(orte),
+        anzahl: orte?.length ?? 0,
+        dauerMs: Date.now() - start,
+      };
+    } catch (error) {
+      checks.ortscache = {
+        kachel: cell,
+        fehler: error instanceof Error ? error.name : 'unbekannt',
+        dauerMs: Date.now() - start,
+      };
+    }
+  }
 
   if (!isPersistent()) {
     checks.datenbank = 'nicht konfiguriert';

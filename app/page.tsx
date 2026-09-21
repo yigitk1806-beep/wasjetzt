@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'motion/react';
 import { TopBar } from '@/components/TopBar';
-import { ThinkingOverlay } from '@/components/ThinkingOverlay';
+import { PlanningOverlay } from '@/components/PlanningOverlay';
 import { ActionCard } from '@/components/home/ActionCard';
 import { CategoryTiles } from '@/components/home/CategoryTiles';
 import { DealsStrip } from '@/components/home/DealsStrip';
@@ -14,7 +14,7 @@ import { useLocale } from '@/components/LocaleProvider';
 import { useLocation } from '@/hooks/useLocation';
 import { useWeather } from '@/hooks/useWeather';
 import { loadRecentPlans, suggestRoutine, type RecentPlan } from '@/lib/clientStore';
-import { requestPlan, type PlanRequestInput } from '@/lib/planClient';
+import { requestPlanStreamed, type PlanPhase, type PlanRequestInput } from '@/lib/planClient';
 import type { Category } from '@/types/domain';
 
 export default function HomePage() {
@@ -25,6 +25,7 @@ export default function HomePage() {
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<PlanPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recent, setRecent] = useState<RecentPlan[]>([]);
   const [routineHint, setRoutineHint] = useState<string | null>(null);
@@ -58,15 +59,16 @@ export default function HomePage() {
         return;
       }
       setBusy(true);
+      setPhase(null);
       setError(null);
 
-      const response = await requestPlan({
+      const response = await requestPlanStreamed({
         lat: location.location.lat,
         lon: location.location.lon,
         originLabel: location.label,
         startISO: new Date().toISOString(),
         ...extra,
-      });
+      }, setPhase);
 
       if (response.plan) {
         router.push(`/plan/${response.plan.id}`);
@@ -74,6 +76,7 @@ export default function HomePage() {
       }
 
       setBusy(false);
+      setPhase(null);
       setError(response.message ?? response.error ?? t.plan.empty);
     },
     [location, router, t.plan.empty],
@@ -207,7 +210,7 @@ export default function HomePage() {
         onPick={setManual}
         onUseDevice={() => void requestDevice()}
       />
-      <ThinkingOverlay open={busy} />
+      <PlanningOverlay open={busy} phase={phase} />
     </>
   );
 }
