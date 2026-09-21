@@ -41,7 +41,13 @@ const ELEMENT_LIMIT = 900;
 
 /** Zellgröße des Caches (~2,2 km). Kleine Ortswechsel treffen denselben Cache. */
 const CACHE_CELL_DEGREES = 0.02;
-const CACHE_TTL_MS = 60 * 60 * 1000;
+/**
+ * Wie lange eine geladene Kachel gilt. Großzügig, weil sich die Orte einer
+ * Gegend kaum ändern – und weil Öffnungszeiten ohnehin erst beim Planen gegen
+ * die aktuelle Uhrzeit geprüft werden, nicht beim Laden. Mit einer kurzen
+ * Frist würde praktisch jeder erste Besucher des Tages auf Overpass warten.
+ */
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Erster Endpunkt bekommt mehr Zeit; die Ersatzinstanzen sollen nicht bremsen. */
 const PRIMARY_TIMEOUT_MS = 25_000;
