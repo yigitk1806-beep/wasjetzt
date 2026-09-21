@@ -7,6 +7,7 @@ import {
   type ReplaceHint,
 } from '@/engine/planBuilder';
 import { getProviders } from '@/providers/registry';
+import { replaceTourStop } from '@/engine/tourBuilder';
 import { normalizePreferences } from '@/lib/requestSchema';
 
 export const runtime = 'nodejs';
@@ -45,7 +46,10 @@ export async function POST(
     const providers = getProviders();
     const preferences = normalizePreferences(body.preferences);
     const ctx = await createPlanContext(plan.request, preferences, providers);
-    const next = replaceStep(ctx, plan, stepId, hint);
+    const next =
+      plan.mode === 'tour'
+        ? replaceTourStop(ctx, plan, stepId, hint)
+        : replaceStep(ctx, plan, stepId, hint);
 
     if (!next) {
       return NextResponse.json(

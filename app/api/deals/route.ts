@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { haversineMeters, searchRadiusMeters } from '@/lib/geo';
 import { getProviders } from '@/providers/registry';
-import { isOpenDuring } from '@/lib/time';
+import { isOpenDuring, processOffsetMin } from '@/lib/time';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,11 +24,16 @@ export async function GET(request: Request) {
     const providers = getProviders();
     const center = { lat, lon };
     const radius = searchRadiusMeters('transit', 240);
-    const places = await providers.places.search({ center, radiusMeters: radius, limit: 300 });
+    const [places, weather] = await Promise.all([
+      providers.places.search({ center, radiusMeters: radius, limit: 300 }),
+      providers.weather.forecast(center, 1),
+    ]);
     const now = new Date();
+    const offset =
+      weather.utcOffsetSeconds !== undefined ? weather.utcOffsetSeconds / 60 : processOffsetMin(now);
 
     const deals = places
-      .filter((p) => p.deal && p.openingHours && isOpenDuring(p.openingHours, now, 60))
+      .filter((p) => p.deal && p.openingHours && isOpenDuring(p.openingHours, now, 60, offset))
       .map((p) => ({
         place: p,
         distanceMeters: Math.round(haversineMeters(center, p.location)),

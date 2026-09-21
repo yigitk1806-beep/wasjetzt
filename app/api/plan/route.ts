@@ -7,8 +7,10 @@ import {
   refinePlanRouting,
 } from '@/engine/planBuilder';
 import { variantByKey } from '@/engine/scoring';
+import { buildTour } from '@/engine/tourBuilder';
 import { getProviders } from '@/providers/registry';
 import { normalizePlanRequest, normalizePreferences, RequestError } from '@/lib/requestSchema';
+import { localHour, processOffsetMin } from '@/lib/time';
 import type { Mood, Plan } from '@/types/domain';
 
 export const runtime = 'nodejs';
@@ -126,7 +128,8 @@ async function runPipeline(
       };
       if (intent.homeByMinutes !== undefined) {
         merged.mustBeHomeByISO =
-          input.mustBeHomeByISO ?? homeByFrom(intent.homeByMinutes, merged.startISO);
+          input.mustBeHomeByISO ??
+          homeByFrom(intent.homeByMinutes, merged.startISO, clientOffset(input));
       }
     }
 
@@ -140,17 +143,23 @@ async function runPipeline(
     const ctx = await createPlanContext(planRequest, preferences, providers);
     melde('wetter');
 
-    const wantVariants = input.variants !== false;
-    const plans = (wantVariants ? buildPlanVariants(ctx) : [buildPlan(ctx)]).filter(
-      (p): p is Plan => Boolean(p),
-    );
+    const isTour = planRequest.mode === 'tour';
+    const wantVariants = input.variants !== false && !isTour;
+    const kandidaten = isTour
+      ? [buildTour(ctx)]
+      : wantVariants
+        ? buildPlanVariants(ctx)
+        : [buildPlan(ctx)];
+    const plans = kandidaten.filter((p): p is Plan => Boolean(p));
 
     if (plans.length === 0) {
       return {
         ok: false,
         status: 200,
         error: 'no-plan',
-        message: 'Dafür finde ich gerade nichts Passendes.',
+        message: isTour
+          ? 'Hier finde ich gerade zu wenige offene Sehenswürdigkeiten für eine Tour.'
+          : 'Dafür finde ich gerade nichts Passendes.',
         understood,
       };
     }
@@ -196,19 +205,29 @@ async function runPipeline(
   }
 }
 
+/** Vom Gerät gemeldeter Zeitversatz – der Server selbst läuft auf UTC. */
+function clientOffset(input: Record<string, unknown>): number {
+  const v = Number(input.tzOffsetMin);
+  return Number.isFinite(v) && Math.abs(v) <= 14 * 60 ? v : processOffsetMin();
+}
+
 function mergeMoods(explicit: unknown, parsed: Mood[]): Mood[] {
   const list = Array.isArray(explicit) ? (explicit as Mood[]) : [];
   return Array.from(new Set([...list, ...parsed]));
 }
 
-function homeByFrom(minutesSinceMidnight: number, startISO: unknown): string {
+/**
+ * „Bis 22 Uhr zuhause" → Zeitpunkt. Die Uhrzeit meint die Ortszeit des Nutzers,
+ * nicht die des Servers – deshalb über den vom Gerät gemeldeten Versatz.
+ */
+function homeByFrom(minutesSinceMidnight: number, startISO: unknown, offsetMin: number): string {
   const base = typeof startISO === 'string' ? new Date(startISO) : new Date();
-  const target = new Date(base);
-  target.setHours(0, 0, 0, 0);
-  target.setMinutes(minutesSinceMidnight);
+  const lokal = new Date(base.getTime() + offsetMin * 60_000);
+  const mitternachtLokal = Date.UTC(lokal.getUTCFullYear(), lokal.getUTCMonth(), lokal.getUTCDate());
+  let ziel = mitternachtLokal + minutesSinceMidnight * 60_000 - offsetMin * 60_000;
   // Liegt die Uhrzeit vor dem Start, ist der nächste Tag gemeint.
-  if (target <= base) target.setDate(target.getDate() + 1);
-  return target.toISOString();
+  if (ziel <= base.getTime()) ziel += 24 * 60 * 60_000;
+  return new Date(ziel).toISOString();
 }
 
 /** "Überrasch mich": zufällige, aber zur Tageszeit passende Stimmung. */
@@ -216,9 +235,12 @@ function applySurprise(
   input: Record<string, unknown>,
   preferences: ReturnType<typeof normalizePreferences>,
 ): Record<string, unknown> {
-  const hour = new Date(
-    typeof input.startISO === 'string' ? input.startISO : Date.now(),
-  ).getHours();
+  const hour = Math.floor(
+    localHour(
+      new Date(typeof input.startISO === 'string' ? input.startISO : Date.now()),
+      clientOffset(input),
+    ),
+  );
 
   const pool: Mood[] =
     hour < 12

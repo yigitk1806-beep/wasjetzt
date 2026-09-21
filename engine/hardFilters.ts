@@ -1,6 +1,7 @@
-import { isOpenDuring } from '@/lib/time';
+import { isOpenDuring, localHour } from '@/lib/time';
 import type { Place, WeatherSlice } from '@/types/domain';
 import { BUDGET_MAX_LEVEL } from './budget';
+import { fitsTimeOfDay } from './timeOfDay';
 import type { PlanContext } from './types';
 import { isWeatherBlocked } from './weatherRules';
 
@@ -38,14 +39,26 @@ const UNKNOWN_HOURS_WINDOW = { fromHour: 9, toHour: 22 };
 export function passesHardFilters(input: FilterInput): FilterResult {
   const { place, ctx, start, durationMin, distanceMeters, spentMin, weatherAtStart } = input;
 
+  // 0. Passt die Art des Ortes zur Tageszeit? Eine Kneipe mit „24/7" ist
+  //    um 6:40 Uhr zwar offen, aber kein Vorschlag. Das gilt auch für den
+  //    zweiten, aufgeweichten Suchdurchlauf – der darf es nicht umgehen.
+  if (!fitsTimeOfDay(place, start, ctx.tzOffsetMin)) {
+    return { ok: false, reason: 'time-of-day' };
+  }
+
   // 1. Geöffnet? – oder zumindest plausibel, wenn wir es nicht wissen.
   if (place.openingHours) {
-    if (!isOpenDuring(place.openingHours, start, durationMin)) {
+    if (!isOpenDuring(place.openingHours, start, durationMin, ctx.tzOffsetMin)) {
       return { ok: false, reason: 'closed' };
     }
+  } else if (place.category === 'nature') {
+    // Parks, Aussichtspunkte, Gärten ohne Zeitangabe sind in aller Regel
+    // öffentlich zugänglich. Die sinnvolle Tageszeit (oben) greift trotzdem.
   } else {
-    const startHour = start.getHours();
-    const endHour = new Date(start.getTime() + durationMin * 60_000).getHours();
+    const startHour = Math.floor(localHour(start, ctx.tzOffsetMin));
+    const endHour = Math.floor(
+      localHour(new Date(start.getTime() + durationMin * 60_000), ctx.tzOffsetMin),
+    );
     const insideWindow =
       startHour >= UNKNOWN_HOURS_WINDOW.fromHour &&
       startHour < UNKNOWN_HOURS_WINDOW.toHour &&

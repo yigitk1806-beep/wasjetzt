@@ -18,6 +18,11 @@ export type { Coordinates };
 export type PlaceQuery = {
   center: Coordinates;
   radiusMeters: number;
+  /**
+   * `sights` liefert Sehenswürdigkeiten statt Ausgehorte – eigene Abfrage,
+   * eigener Cache, damit sich beides nicht die Plätze im Ergebnis streitig macht.
+   */
+  theme?: 'sights';
   categories?: Category[];
   /** ISO-Zeitpunkt, zu dem der Ort geöffnet sein sollte (nur Vorfilter). */
   openAtISO?: string;
@@ -36,7 +41,7 @@ export interface PlaceProvider {
    * erste echte Anfrage des Nutzers nicht auf das Netz warten muss.
    * Darf ohne Folgen scheitern.
    */
-  prefetch?(center: Coordinates): Promise<void>;
+  prefetch?(center: Coordinates, theme?: 'places' | 'sights'): Promise<void>;
 }
 
 export interface WeatherProvider {

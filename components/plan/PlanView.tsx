@@ -142,7 +142,8 @@ export function PlanView({ initialPlan }: Props) {
         {/* Kennzahlen auf einen Blick */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.86rem] text-ink-soft">
           <span className="font-semibold">
-            {formatClock(plan.startISO)} – {formatClock(plan.endISO)}
+            {formatClock(plan.startISO, 'de', plan.tzOffsetMin)} –{' '}
+            {formatClock(plan.endISO, 'de', plan.tzOffsetMin)}
           </span>
           <span className="text-ink-faint">·</span>
           <span>{formatDuration(plan.totalDurationMin)}</span>
@@ -193,6 +194,7 @@ export function PlanView({ initialPlan }: Props) {
         <PlanTimeline
           steps={plan.steps}
           currency={plan.currency}
+          tzOffsetMin={plan.tzOffsetMin}
           onReplace={(step) => {
             setReplaceError(null);
             setReplacing(step);

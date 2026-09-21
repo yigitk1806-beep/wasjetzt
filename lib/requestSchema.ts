@@ -6,6 +6,8 @@ import {
   type Mood,
   type Party,
   type PlanRequest,
+  type SightTheme,
+  type TourTweak,
   type UserPreferences,
 } from '@/types/domain';
 
@@ -13,6 +15,9 @@ const PARTIES: Party[] = ['solo', 'partner', 'friends', 'family'];
 const BUDGETS: BudgetPreset[] = ['free', 'low', 'medium', 'high', 'any'];
 const MOBILITIES: Mobility[] = ['walk', 'bike', 'transit', 'car'];
 const MOODS: Mood[] = ['date', 'action', 'chill', 'party', 'food', 'nature', 'gaming', 'new'];
+const SIGHT_THEMES: SightTheme[] = ['classic', 'photo', 'museum', 'park', 'history', 'hidden'];
+const TOUR_TWEAKS: TourTweak[] = ['more', 'less-walk', 'museum', 'photo', 'free', 'faster', 'calm', 'surprise'];
+
 const CATEGORIES: Category[] = [
   'food', 'cafe', 'bar', 'activity', 'cinema', 'culture',
   'nature', 'sport', 'gaming', 'wellness', 'shopping', 'event',
@@ -76,6 +81,21 @@ export function normalizePlanRequest(raw: unknown): PlanRequest {
       : undefined;
 
   const age = num(input.age);
+  const isTour = input.mode === 'tour';
+  const tz = num(input.tzOffsetMin);
+
+  const interests = Array.isArray(input.interests)
+    ? input.interests.filter(
+        (t): t is SightTheme => typeof t === 'string' && (SIGHT_THEMES as string[]).includes(t),
+      )
+    : [];
+  const excludePlaceIds = Array.isArray(input.excludePlaceIds)
+    ? input.excludePlaceIds.filter((v): v is string => typeof v === 'string').slice(0, 200)
+    : [];
+  const tourTweak =
+    typeof input.tourTweak === 'string' && (TOUR_TWEAKS as string[]).includes(input.tourTweak)
+      ? (input.tourTweak as TourTweak)
+      : undefined;
 
   return {
     origin: { lat, lon },
@@ -93,7 +113,7 @@ export function normalizePlanRequest(raw: unknown): PlanRequest {
         ? Math.min(1000, budgetPerPerson)
         : undefined,
     moods,
-    mobility: pick<Mobility>(input.mobility, MOBILITIES, 'transit'),
+    mobility: pick<Mobility>(input.mobility, MOBILITIES, isTour ? 'walk' : 'transit'),
     mustBeHomeByISO: isoOrUndefined(input.mustBeHomeByISO),
     homeLocation:
       homeLat !== undefined && homeLon !== undefined
@@ -107,6 +127,11 @@ export function normalizePlanRequest(raw: unknown): PlanRequest {
     currency: typeof input.currency === 'string' ? input.currency.slice(0, 3) : 'EUR',
     age: age !== undefined && age >= 6 && age <= 120 ? Math.round(age) : undefined,
     touristMode: input.touristMode === true,
+    tzOffsetMin: tz !== undefined && Math.abs(tz) <= 14 * 60 ? Math.round(tz) : undefined,
+    mode: isTour ? 'tour' : 'evening',
+    interests: isTour ? interests : undefined,
+    excludePlaceIds: excludePlaceIds.length ? excludePlaceIds : undefined,
+    tourTweak: isTour ? tourTweak : undefined,
   };
 }
 

@@ -48,6 +48,30 @@ export type Mood =
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 
+/**
+ * Was ein Ort als Sehenswürdigkeit bietet. Wird aus OSM-Tags abgeleitet,
+ * nicht von Hand vergeben – siehe providers/osm/sights.ts.
+ *
+ * `classic` und `hidden` schließen sich aus und hängen an einem überprüfbaren
+ * Signal: Ist der Ort in OSM mit Wikipedia oder Wikidata verknüpft, gilt er
+ * als bekannt, sonst als Geheimtipp.
+ */
+export type SightTheme = 'classic' | 'photo' | 'museum' | 'park' | 'history' | 'hidden';
+
+/** Was der Plan ist: ein Abendprogramm oder eine Besichtigungstour. */
+export type PlanMode = 'evening' | 'tour';
+
+/** Nachträgliche Änderung einer ganzen Tour. */
+export type TourTweak =
+  | 'more'
+  | 'less-walk'
+  | 'museum'
+  | 'photo'
+  | 'free'
+  | 'faster'
+  | 'calm'
+  | 'surprise';
+
 /** 0 = Sonntag … 6 = Samstag (wie Date#getDay). */
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -121,6 +145,10 @@ export type Place = {
   ratingCount?: number;
   /** Herkunft der Daten. "mock" wird in der UI kenntlich gemacht. */
   source: DataSource;
+  /** Nur bei Sehenswürdigkeiten gesetzt. */
+  themes?: SightTheme[];
+  /** Mit Wikipedia/Wikidata verknüpft – echtes Bekanntheitssignal aus OSM. */
+  notable?: boolean;
   /** Mindestalter, falls relevant (z. B. Bar/Club). */
   minAge?: number;
   bookable?: boolean;
@@ -160,6 +188,11 @@ export type WeatherForecast = {
   hourly: WeatherSlice[];
   sunriseISO?: string;
   sunsetISO?: string;
+  /**
+   * Versatz der Ortszeit gegenüber UTC. Grundlage für alles, was „wie spät
+   * ist es dort?" fragt – der Server selbst läuft bei Vercel auf UTC.
+   */
+  utcOffsetSeconds?: number;
   source: 'open-meteo' | 'fallback';
 };
 
@@ -199,6 +232,10 @@ export type Plan = {
   /** Ein Satz, der den Plan beschreibt. */
   summary: string;
   variant: PlanVariantKey;
+  /** Fehlt bei älteren Plänen – dann ist es ein Abendprogramm. */
+  mode?: PlanMode;
+  /** Zeitversatz des Ortes in Minuten – Uhrzeiten werden in Ortszeit angezeigt. */
+  tzOffsetMin?: number;
   steps: PlanStep[];
   startISO: string;
   endISO: string;
@@ -296,6 +333,19 @@ export type PlanRequest = {
   /** Alter des Nutzers, nur falls freiwillig hinterlegt. */
   age?: number;
   touristMode?: boolean;
+  /**
+   * Zeitversatz des Geräts in Minuten (MEZ = 60, MESZ = 120). Rückfall, wenn
+   * der Wetterdienst die Ortszeit nicht liefert.
+   */
+  tzOffsetMin?: number;
+  /** Besichtigungstour statt Abendprogramm. */
+  mode?: PlanMode;
+  /** Was der Nutzer sehen will. Leer oder fehlend = überraschen lassen. */
+  interests?: SightTheme[];
+  /** Orte, die nicht noch einmal vorkommen sollen (etwa aus Tag 1). */
+  excludePlaceIds?: string[];
+  /** Nachträgliche Anpassung einer bestehenden Tour. */
+  tourTweak?: TourTweak;
 };
 
 export type UserPreferences = {

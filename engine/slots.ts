@@ -1,5 +1,5 @@
 import type { Category, Mood } from '@/types/domain';
-import type { DayPart } from '@/lib/time';
+import { localHour, type DayPart } from '@/lib/time';
 import type { PlanContext, Slot } from './types';
 
 /** Welche Kategorien eine Stimmung als Hauptaktivität bedient. */
@@ -63,7 +63,7 @@ function dedupe<T>(list: T[]): T[] {
 function wantsMeal(ctx: PlanContext): boolean {
   if (ctx.request.moods.includes('food')) return true;
   if (ctx.request.focusCategory === 'food') return true;
-  const hour = ctx.start.getHours();
+  const hour = Math.floor(localHour(ctx.start, ctx.tzOffsetMin));
   const meal = (hour >= 11 && hour <= 14) || (hour >= 17 && hour <= 21);
   return meal && ctx.request.availableMinutes >= 120;
 }

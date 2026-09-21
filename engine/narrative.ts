@@ -106,3 +106,26 @@ const CATEGORY_REASON: Record<Place['category'], string> = {
   shopping: 'Zum Stöbern und Treibenlassen.',
   event: 'Gibt es nur heute.',
 };
+
+/**
+ * Tourtitel aus dem Ort, den der Nutzer gewählt hat – ohne ausgedachten
+ * Stadtnamen, wenn nur ein GPS-Standort vorliegt.
+ */
+export function tourTitle(ctx: PlanContext): string {
+  const label = ctx.request.originLabel?.trim();
+  const ort = !label || label === 'Dein Standort' ? 'Deine Umgebung' : label;
+  return `${ort} entdecken`;
+}
+
+/**
+ * „6 Stationen · 5,2 km". Pausen zählen nicht als Station. Das „ca." steht
+ * nur, solange mindestens ein Weg geschätzt statt echt geroutet ist.
+ */
+export function tourSummary(steps: PlanStep[]): string {
+  const stationen = steps.filter((s) => s.place.themes?.length).length;
+  const meter = steps.reduce((sum, s) => sum + s.travelFromPrevious.distanceMeters, 0);
+  const km = (meter / 1000).toLocaleString('de', { maximumFractionDigits: 1 });
+  const geschaetzt = steps.some((s) => s.travelFromPrevious.estimated);
+  const wort = stationen === 1 ? 'Station' : 'Stationen';
+  return `${stationen} ${wort} · ${geschaetzt ? 'ca. ' : ''}${km} km`;
+}

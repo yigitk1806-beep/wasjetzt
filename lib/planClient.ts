@@ -1,7 +1,7 @@
 'use client';
 
 import { loadPreferences } from '@/lib/clientStore';
-import type { Category, Mobility, Mood, Party, Plan } from '@/types/domain';
+import type { Category, Mobility, Mood, Party, Plan, SightTheme, TourTweak } from '@/types/domain';
 
 export type PlanRequestInput = {
   lat: number;
@@ -23,6 +23,10 @@ export type PlanRequestInput = {
   surprise?: boolean;
   variants?: boolean;
   touristMode?: boolean;
+  mode?: 'evening' | 'tour';
+  interests?: SightTheme[];
+  excludePlaceIds?: string[];
+  tourTweak?: TourTweak;
 };
 
 export type PlanResponse = {
@@ -104,6 +108,9 @@ function bodyFor(
 ): Record<string, unknown> {
   return {
     ...input,
+    // Der Server läuft auf UTC; ohne diese Angabe wüsste er nicht, welche
+    // Uhrzeit „bis 22 Uhr" beim Nutzer meint.
+    tzOffsetMin: -new Date().getTimezoneOffset(),
     language: preferences.language,
     age: preferences.age,
     homeLat: preferences.homeLocation?.lat,

@@ -16,12 +16,14 @@ const MOBILITY_EMOJI: Record<Mobility, string> = {
 type Props = {
   steps: PlanStep[];
   currency: string;
+  /** Uhrzeiten in Ortszeit des Plans, nicht in der Zeit des Geräts. */
+  tzOffsetMin?: number;
   onReplace: (step: PlanStep) => void;
   highlightIds?: string[];
 };
 
 /** Der Plan als Zeitstrahl: Uhrzeit links, Aktivität rechts, Wege dazwischen. */
-export function PlanTimeline({ steps, currency, onReplace, highlightIds = [] }: Props) {
+export function PlanTimeline({ steps, currency, tzOffsetMin, onReplace, highlightIds = [] }: Props) {
   return (
     <ol className="space-y-1">
       {steps.map((step, index) => (
@@ -51,7 +53,7 @@ export function PlanTimeline({ steps, currency, onReplace, highlightIds = [] }: 
           >
             <div className="flex w-[3rem] shrink-0 flex-col items-center pt-0.5">
               <span className="text-[0.92rem] font-bold tabular-nums">
-                {formatClock(step.startISO)}
+                {formatClock(step.startISO, 'de', tzOffsetMin)}
               </span>
               <span className="mt-0.5 text-[0.68rem] text-ink-faint tabular-nums">
                 {formatDuration(step.durationMin)}

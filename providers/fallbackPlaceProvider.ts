@@ -39,7 +39,7 @@ export class FallbackPlaceProvider implements PlaceProvider {
     return provider.getById?.(id) ?? null;
   }
 
-  async prefetch(center: Coordinates): Promise<void> {
-    await this.primary.prefetch?.(center);
+  async prefetch(center: Coordinates, theme?: 'places' | 'sights'): Promise<void> {
+    await this.primary.prefetch?.(center, theme);
   }
 }

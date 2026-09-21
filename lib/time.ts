@@ -1,7 +1,33 @@
 import type { OpeningHours, Season, Weekday } from '@/types/domain';
 
-export function minutesSinceMidnight(date: Date): number {
-  return date.getHours() * 60 + date.getMinutes();
+/**
+ * Ortszeit statt Serverzeit.
+ *
+ * Der Server läuft bei Vercel auf UTC. Alles, was nach „wie spät ist es dort?"
+ * fragt – Öffnungszeiten, Tageszeit, Wochentag – muss deshalb mit dem Versatz
+ * des *Ortes* rechnen, nicht mit dem des Servers. Sonst hält die App um 9:30
+ * ein Museum für geschlossen, das um 9 Uhr öffnet, weil sie 7:30 annimmt.
+ *
+ * Technik: Zeitpunkt um den Versatz verschieben und die UTC-Felder lesen.
+ * Das ist unabhängig davon, in welcher Zeitzone der Rechner selbst läuft.
+ */
+function ortszeit(date: Date, offsetMin: number): Date {
+  return new Date(date.getTime() + offsetMin * 60_000);
+}
+
+/** Versatz der Zeitzone, in der dieser Prozess läuft – nur als Rückfall. */
+export function processOffsetMin(at: Date = new Date()): number {
+  return -at.getTimezoneOffset();
+}
+
+export function minutesSinceMidnight(date: Date, offsetMin: number): number {
+  const d = ortszeit(date, offsetMin);
+  return d.getUTCHours() * 60 + d.getUTCMinutes();
+}
+
+/** Stunde am Ort als Kommazahl, z. B. 9.5 für 9:30 Uhr. */
+export function localHour(date: Date, offsetMin: number): number {
+  return minutesSinceMidnight(date, offsetMin) / 60;
 }
 
 export function roundUpToQuarter(date: Date): Date {
@@ -12,11 +38,17 @@ export function roundUpToQuarter(date: Date): Date {
   return d;
 }
 
-export function formatClock(iso: string, locale = 'de'): string {
-  return new Date(iso).toLocaleTimeString(locale, {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+/**
+ * Uhrzeit für die Oberfläche. Mit `offsetMin` in der Ortszeit des Plans –
+ * wichtig, wenn jemand von Berlin aus einen Tag in New York plant. Ohne
+ * Angabe in der Zeit des Geräts.
+ */
+export function formatClock(iso: string, locale = 'de', offsetMin?: number): string {
+  if (offsetMin === undefined) {
+    return new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  }
+  const d = ortszeit(new Date(iso), offsetMin);
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 }
 
 /**
@@ -37,8 +69,8 @@ export function formatDuration(minutes: number, locale = 'de'): string {
   return deutsch ? `${h} Std. ${m} Min.` : `${h} h ${m} min`;
 }
 
-export function weekdayOf(date: Date): Weekday {
-  return date.getDay() as Weekday;
+export function weekdayOf(date: Date, offsetMin: number): Weekday {
+  return ortszeit(date, offsetMin).getUTCDay() as Weekday;
 }
 
 /**
@@ -49,10 +81,12 @@ export function isOpenDuring(
   hours: OpeningHours,
   start: Date,
   durationMin: number,
+  /** Versatz der Ortszeit – OSM-Öffnungszeiten gelten in Ortszeit. */
+  offsetMin: number,
 ): boolean {
-  const startMin = minutesSinceMidnight(start);
+  const startMin = minutesSinceMidnight(start, offsetMin);
   const endMin = startMin + durationMin;
-  const today = weekdayOf(start);
+  const today = weekdayOf(start, offsetMin);
   const yesterday = ((today + 6) % 7) as Weekday;
 
   const todayIntervals = hours[today] ?? [];
@@ -91,8 +125,8 @@ export function seasonOf(date: Date, lat: number): Season {
 
 export type DayPart = 'morning' | 'midday' | 'afternoon' | 'evening' | 'night';
 
-export function dayPartOf(date: Date): DayPart {
-  const h = date.getHours();
+export function dayPartOf(date: Date, offsetMin: number): DayPart {
+  const h = Math.floor(localHour(date, offsetMin));
   if (h < 11) return 'morning';
   if (h < 14) return 'midday';
   if (h < 17) return 'afternoon';

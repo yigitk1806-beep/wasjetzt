@@ -1,6 +1,13 @@
 import { estimateTravelMinutes, haversineMeters, searchRadiusMeters } from '@/lib/geo';
 import { shortId } from '@/lib/id';
-import { dayPartOf, isOpenDuring, roundUpToQuarter, seasonOf } from '@/lib/time';
+import {
+  dayPartOf,
+  formatClock,
+  isOpenDuring,
+  processOffsetMin,
+  roundUpToQuarter,
+  seasonOf,
+} from '@/lib/time';
 import type { RouteQuery, RoutingProvider } from '@/providers/types';
 import type {
   Category,
@@ -18,7 +25,7 @@ import type {
 import type { ProviderSet } from '@/providers/registry';
 import { aggregateCost } from './budget';
 import { passesHardFilters } from './hardFilters';
-import { planSummary, planTitle, stepReason } from './narrative';
+import { planSummary, planTitle, stepReason, tourSummary, tourTitle } from './narrative';
 import { scorePlace, VARIANTS, variantByKey } from './scoring';
 import { buildSlots } from './slots';
 import type { PlanContext, Slot, VariantProfile } from './types';
@@ -56,12 +63,15 @@ export async function createPlanContext(
   overrides?: { radiusMeters?: number },
 ): Promise<PlanContext> {
   const start = roundUpToQuarter(new Date(request.startISO));
+  const isTour = request.mode === 'tour';
   const radiusMeters =
     overrides?.radiusMeters ??
-    searchRadiusMeters(request.mobility, request.availableMinutes);
+    (isTour ? tourRadiusMeters(request.availableMinutes) : searchRadiusMeters(request.mobility, request.availableMinutes));
 
   // Parallel laden – Geschwindigkeit ist hier das Feature.
-  const [places, events, weather] = await Promise.all([
+  // Bei Touren kommen die Sehenswürdigkeiten als eigene Abfrage dazu; die
+  // normalen Orte braucht die Tour trotzdem – für Pausen und Geheimtipps.
+  const [places, events, weather, sights] = await Promise.all([
     providers.places.search({
       center: request.origin,
       radiusMeters,
@@ -79,9 +89,21 @@ export async function createPlanContext(
       })
       .catch(() => [] as Place[]),
     providers.weather.forecast(request.origin, 24),
+    isTour
+      ? providers.places
+          .search({ center: request.origin, radiusMeters, theme: 'sights', limit: 500 })
+          .catch(() => [] as Place[])
+      : Promise.resolve(undefined),
   ]);
 
   const latestEnd = computeLatestEnd(request, start);
+
+  // Ortszeit: bevorzugt vom Wetterdienst (kennt die Zeitzone des Ortes),
+  // sonst vom Gerät des Nutzers, zuletzt vom Server.
+  const tzOffsetMin =
+    weather.utcOffsetSeconds !== undefined
+      ? Math.round(weather.utcOffsetSeconds / 60)
+      : (request.tzOffsetMin ?? processOffsetMin(start));
 
   return {
     request,
@@ -89,12 +111,24 @@ export async function createPlanContext(
     pool: [...places, ...events],
     weather,
     season: seasonOf(start, request.origin.lat),
-    dayPart: dayPartOf(start),
+    dayPart: dayPartOf(start, tzOffsetMin),
     start,
     latestEnd,
     radiusMeters,
     budgetCap: request.budgetPerPerson ?? BUDGET_CAPS[request.budget],
+    sights,
+    tzOffsetMin,
   };
+}
+
+/**
+ * Umkreis für Besichtigungstouren. Zu Fuß schafft man in zwei Stunden
+ * keine fünf Kilometer Umweg – der Radius wächst deshalb mit der Zeit.
+ */
+function tourRadiusMeters(availableMinutes: number): number {
+  if (availableMinutes <= 120) return 1300;
+  if (availableMinutes <= 240) return 2000;
+  return 2500;
 }
 
 function computeLatestEnd(request: PlanRequest, start: Date): Date {
@@ -157,7 +191,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
   return { steps, droppedSlots: dropped };
 }
 
-function reserveMinutesFor(ctx: PlanContext, isLast: boolean, from: Coordinates): number {
+export function reserveMinutesFor(ctx: PlanContext, isLast: boolean, from: Coordinates): number {
   if (!isLast) return 0;
   if (!ctx.request.mustBeHomeByISO) return 0;
   const home = ctx.request.homeLocation ?? ctx.request.origin;
@@ -193,6 +227,27 @@ function pickForSlot(input: PickInput): Picked | null {
   return relaxed;
 }
 
+/**
+ * Harte Regeln gegen Wiederholung.
+ *
+ * Früh am Morgen hat oft nur eine Art von Ort offen. Ohne diese Regeln füllte
+ * der Plan jeden freien Platz damit – drei Cafés hintereinander. Ein kürzerer
+ * Plan ist ehrlicher als ein aufgefüllter.
+ *
+ *  - dieselbe Art nie zweimal direkt hintereinander (Ausnahme: Bars – von
+ *    einer Kneipe in die nächste zu ziehen ist ein echtes Abendprogramm),
+ *  - höchstens zweimal pro Plan,
+ *  - der aufgeweichte zweite Suchdurchlauf darf nur Arten nehmen, die im Plan
+ *    noch gar nicht vorkommen – er soll Lücken füllen, nicht verdoppeln.
+ */
+function abwechslungOk(category: Category, input: PickInput, aufgeweicht: boolean): boolean {
+  const schonDa = input.usedCategories.filter((c) => c === category).length;
+  if (aufgeweicht && schonDa > 0) return false;
+  if (schonDa >= 2) return false;
+  if (input.previousCategory === category && category !== 'bar') return false;
+  return true;
+}
+
 function pickFromPool(input: PickInput, roles: Category[] | undefined): Picked | null {
   const { ctx, slot, profile, cursor, location, spentMin } = input;
   let best: Picked | null = null;
@@ -201,6 +256,7 @@ function pickFromPool(input: PickInput, roles: Category[] | undefined): Picked |
     if (input.usedPlaceIds.has(place.id)) continue;
     if (input.excludeIds?.has(place.id)) continue;
     if (roles && !roles.includes(place.category)) continue;
+    if (!abwechslungOk(place.category, input, roles === undefined)) continue;
 
     const distanceMeters = haversineMeters(location, place.location);
     const travelMin =
@@ -265,7 +321,7 @@ function pickFromPool(input: PickInput, roles: Category[] | undefined): Picked |
   return best;
 }
 
-function roundToFive(date: Date): Date {
+export function roundToFive(date: Date): Date {
   const d = new Date(date);
   d.setSeconds(0, 0);
   const rest = d.getMinutes() % 5;
@@ -329,9 +385,30 @@ export function buildPlan(
   variant: PlanVariantKey = 'balanced',
 ): Plan | null {
   const profile = variantByKey(variant);
-  const { steps, droppedSlots } = buildSteps(ctx, profile);
+  let { steps, droppedSlots } = buildSteps(ctx, profile);
+
+  // Früh am Morgen hat kaum etwas offen. Statt aufzugeben, wird der Beginn
+  // stundenweise verschoben – solange noch Zeit im Budget bleibt.
+  let verschobenUm = 0;
+  while (steps.length === 0 && verschobenUm < 4) {
+    verschobenUm += 1;
+    const start = new Date(ctx.start.getTime() + verschobenUm * 60 * 60_000);
+    if (start >= ctx.latestEnd) break;
+    ({ steps, droppedSlots } = buildSteps(
+      { ...ctx, start, dayPart: dayPartOf(start, ctx.tzOffsetMin) },
+      profile,
+    ));
+  }
+
   if (steps.length === 0) return null;
-  return assemblePlan(ctx, steps, profile.key, droppedSlots);
+  const plan = assemblePlan(ctx, steps, profile.key, droppedSlots);
+  if (verschobenUm > 0) {
+    plan.notes.unshift({
+      kind: 'time',
+      text: `Um diese Uhrzeit hat noch kaum etwas geöffnet – der Plan beginnt deshalb um ${formatClock(steps[0].startISO, 'de', ctx.tzOffsetMin)} Uhr.`,
+    });
+  }
+  return plan;
 }
 
 export function assemblePlan(
@@ -346,13 +423,15 @@ export function assemblePlan(
   const startISO = steps[0].startISO;
   const endISO = steps[steps.length - 1].endISO;
   const cost = aggregateCost(steps.map((s) => s.price));
+  const isTour = ctx.request.mode === 'tour';
 
   return {
     id: existing?.id ?? shortId(10),
     shareCode: existing?.shareCode ?? shortId(6),
-    title: planTitle(ctx),
-    summary: planSummary(steps, ctx),
+    title: isTour ? tourTitle(ctx) : planTitle(ctx),
+    summary: isTour ? tourSummary(steps) : planSummary(steps, ctx),
     variant,
+    mode: isTour ? 'tour' : 'evening',
     steps,
     startISO,
     endISO,
@@ -368,6 +447,7 @@ export function assemblePlan(
     meetingPoint: existing?.meetingPoint,
     participants: existing?.participants ?? [],
     containsMockData: steps.some((s) => s.place.source === 'mock'),
+    tzOffsetMin: ctx.tzOffsetMin,
     siblings: existing?.siblings,
   };
 }
@@ -460,7 +540,7 @@ export async function refinePlanRouting(
 
   for (const step of steps) {
     if (!step.place.openingHours) continue;
-    if (!isOpenDuring(step.place.openingHours, new Date(step.startISO), step.durationMin)) {
+    if (!isOpenDuring(step.place.openingHours, new Date(step.startISO), step.durationMin, ctx.tzOffsetMin)) {
       return plan;
     }
   }

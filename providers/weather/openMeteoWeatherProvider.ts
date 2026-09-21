@@ -20,6 +20,8 @@ function conditionFromCode(code: number): WeatherCondition {
 }
 
 type OpenMeteoResponse = {
+  /** Mit `timezone=auto`: Versatz der Ortszeit gegenüber UTC. */
+  utc_offset_seconds?: number;
   hourly?: {
     time: string[];
     temperature_2m: number[];
@@ -49,7 +51,10 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
   async forecast(at: Coordinates, hours = 24): Promise<WeatherForecast> {
     const key = `${at.lat.toFixed(2)},${at.lon.toFixed(2)}`;
     const cached = this.cache.get(key);
-    if (cached && Date.now() - cached.at < this.ttlMs) return cached.data;
+    // Zwischengespeichert wird immer die volle Vorhersage; gekürzt wird erst
+    // hier. Sonst bekäme ein Tagesplan nur so viele Stunden, wie der erste
+    // Aufrufer (etwa die Startseite mit 12) zufällig angefragt hat.
+    if (cached && Date.now() - cached.at < this.ttlMs) return kuerzen(cached.data, hours);
 
     try {
       const url = new URL('https://api.open-meteo.com/v1/forecast');
@@ -66,22 +71,28 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
       const res = await fetch(url, { signal: AbortSignal.timeout(3500) });
       if (!res.ok) throw new Error(`open-meteo ${res.status}`);
       const json = (await res.json()) as OpenMeteoResponse;
-      const parsed = this.parse(json, hours);
+      const parsed = this.parse(json);
       this.cache.set(key, { at: Date.now(), data: parsed });
-      return parsed;
+      return kuerzen(parsed, hours);
     } catch {
       return this.fallback();
     }
   }
 
-  private parse(json: OpenMeteoResponse, hours: number): WeatherForecast {
+  private parse(json: OpenMeteoResponse): WeatherForecast {
     const h = json.hourly;
     if (!h || !h.time?.length) return this.fallback();
 
+    // Open-Meteo liefert mit `timezone=auto` die Ortszeit ohne Zonenangabe,
+    // etwa "2026-09-21T06:00". `new Date()` würde das als Zeit des *Servers*
+    // lesen – bei Vercel UTC, also zwei Stunden daneben. Deshalb als UTC lesen
+    // und den mitgelieferten Versatz abziehen.
+    const offset = json.utc_offset_seconds ?? 0;
+    const ortszeit = (text: string) => new Date(Date.parse(`${text}Z`) - offset * 1000);
+
     const now = Date.now();
     const slices: WeatherSlice[] = h.time.map((time, i) => ({
-      // Open-Meteo liefert lokale Zeit ohne Zone – als lokale Zeit interpretieren.
-      time: new Date(time).toISOString(),
+      time: ortszeit(time).toISOString(),
       temperatureC: h.temperature_2m[i],
       condition: conditionFromCode(h.weather_code[i]),
       precipitationProbability: h.precipitation_probability?.[i] ?? 0,
@@ -91,17 +102,14 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
     }));
 
     const upcoming = slices.filter((s) => new Date(s.time).getTime() >= now - 60 * 60 * 1000);
-    const list = (upcoming.length ? upcoming : slices).slice(0, hours);
+    const list = upcoming.length ? upcoming : slices;
 
     return {
       now: list[0],
       hourly: list,
-      sunriseISO: json.daily?.sunrise?.[0]
-        ? new Date(json.daily.sunrise[0]).toISOString()
-        : undefined,
-      sunsetISO: json.daily?.sunset?.[0]
-        ? new Date(json.daily.sunset[0]).toISOString()
-        : undefined,
+      sunriseISO: json.daily?.sunrise?.[0] ? ortszeit(json.daily.sunrise[0]).toISOString() : undefined,
+      sunsetISO: json.daily?.sunset?.[0] ? ortszeit(json.daily.sunset[0]).toISOString() : undefined,
+      utcOffsetSeconds: json.utc_offset_seconds,
       source: 'open-meteo',
     };
   }
@@ -122,4 +130,8 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
     };
     return { now: slice, hourly: [slice], source: 'fallback' };
   }
+}
+
+function kuerzen(forecast: WeatherForecast, hours: number): WeatherForecast {
+  return { ...forecast, hourly: forecast.hourly.slice(0, Math.max(1, hours)) };
 }

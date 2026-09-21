@@ -210,7 +210,7 @@ export function GroupPanel({ plan, onPlanChange }: Props) {
         {plan.meetingPoint ? (
           <p className="text-[0.88rem]">
             <span className="font-semibold">📍 {plan.meetingPoint.label}</span>
-            <span className="text-ink-muted"> · {formatClock(plan.meetingPoint.timeISO)}</span>
+            <span className="text-ink-muted"> · {formatClock(plan.meetingPoint.timeISO, 'de', plan.tzOffsetMin)}</span>
           </p>
         ) : (
           <button

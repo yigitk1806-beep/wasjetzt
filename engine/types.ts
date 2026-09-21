@@ -24,6 +24,13 @@ export type PlanContext = {
   radiusMeters: number;
   /** Harte Obergrenze pro Person, falls gesetzt. */
   budgetCap?: number;
+  /** Nur bei Touren: Sehenswürdigkeiten, getrennt von den Ausgehorten. */
+  sights?: Place[];
+  /**
+   * Versatz der Ortszeit gegenüber UTC in Minuten. Jede Frage nach Uhrzeit
+   * oder Wochentag geht über diesen Wert – nie über die Uhr des Servers.
+   */
+  tzOffsetMin: number;
 };
 
 /** Ein Slot ist eine Position im Plan mit erlaubten Kategorien. */

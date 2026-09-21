@@ -76,8 +76,10 @@ export function classify(tags: OsmTags): ProfileKey | null {
       case 'beach_resort':
         return 'beach';
       case 'sports_centre':
-      case 'fitness_centre':
         return sportKind(tags);
+      // Fitnessstudios brauchen eine Mitgliedschaft – keine spontane Idee.
+      case 'fitness_centre':
+        return null;
       default:
         break;
     }
@@ -128,13 +130,18 @@ function restaurantKind(tags: OsmTags): ProfileKey {
   return 'restaurant';
 }
 
-function sportKind(tags: OsmTags): ProfileKey {
+/**
+ * Nur Sportanlagen, in die man einfach hineingehen kann. Ein allgemeines
+ * Sportzentrum ist meist ein Verein oder Studio mit Mitgliedschaft – das
+ * fliegt raus, statt als Freizeitidee vorgeschlagen zu werden.
+ */
+function sportKind(tags: OsmTags): ProfileKey | null {
   const sport = (tags.sport ?? '').toLowerCase();
   if (/climbing|bouldering/.test(sport)) return 'climbing';
   if (/swimming/.test(sport)) return 'pool';
   if (/ice_skating|ice_hockey/.test(sport)) return 'icerink';
   if (/bowling|10pin/.test(sport)) return 'bowling';
-  return 'sportscentre';
+  return null;
 }
 
 /**
@@ -167,7 +174,7 @@ export function buildOverpassQuery(
 
   const filters = [
     'nwr["amenity"~"^(restaurant|cafe|fast_food|ice_cream|bar|pub|biergarten|nightclub|cinema|theatre|arts_centre|casino|marketplace|public_bath)$"]["name"];',
-    'nwr["leisure"~"^(park|garden|nature_reserve|bowling_alley|escape_game|miniature_golf|amusement_arcade|adult_gaming_centre|water_park|swimming_pool|ice_rink|dance|beach_resort|sports_centre|fitness_centre)$"]["name"];',
+    'nwr["leisure"~"^(park|garden|nature_reserve|bowling_alley|escape_game|miniature_golf|amusement_arcade|adult_gaming_centre|water_park|swimming_pool|ice_rink|dance|beach_resort|sports_centre)$"]["name"];',
     'nwr["tourism"~"^(museum|gallery|viewpoint|zoo|aquarium|theme_park|attraction)$"]["name"];',
     'nwr["shop"~"^(mall|department_store)$"]["name"];',
     'nwr["sport"="climbing"]["name"];',

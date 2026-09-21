@@ -45,8 +45,9 @@ export async function POST(request: Request) {
   // Für den Nutzer ändert das nichts: Die Startseite schickt diese Anfrage
   // ab und wartet nicht auf die Antwort.
   const start = Date.now();
+  const theme = body.theme === 'sights' ? 'sights' : 'places';
   await Promise.all([
-    providers.places.prefetch?.({ lat, lon }) ?? Promise.resolve(),
+    providers.places.prefetch?.({ lat, lon }, theme) ?? Promise.resolve(),
     providers.weather.forecast({ lat, lon }, 24).catch(() => undefined),
   ]);
 
