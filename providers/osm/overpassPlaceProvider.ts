@@ -102,8 +102,13 @@ const MIRROR_TIMEOUT_MS = 8000;
  *
  * Im Normalfall greift das gar nicht – die App lädt die Gegend schon beim
  * Öffnen vor (siehe `prefetch`), der Klick trifft dann den Cache.
+ *
+ * Die 14 Sekunden sind gemessen: Für eine dichte Innenstadt (Kopenhagen,
+ * Neapel) braucht die öffentliche Instanz selbst bei freien Plätzen 9–10
+ * Sekunden. Mit einem knapperen Budget bekäme der erste Besucher einer Gegend
+ * Ersatzdaten, obwohl echte Daten eine Sekunde später da gewesen wären.
  */
-const INTERACTIVE_BUDGET_MS = 11_000;
+const INTERACTIVE_BUDGET_MS = 14_000;
 
 /**
  * So lange wird eine gescheiterte Abfrage nicht wiederholt. Kurz genug, dass
