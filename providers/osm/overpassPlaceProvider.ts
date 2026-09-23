@@ -35,13 +35,30 @@ const ENDPOINTS = [
  * Suchradius gegen Overpass. Größere Mobilitätsradien (Auto: 16 km) werden
  * hierauf begrenzt – jenseits davon wird die Abfrage in dichten Städten zu
  * langsam für „Jetzt los".
- *
- * Bekannte Grenze: In sehr dichten Innenstädten greift `ELEMENT_LIMIT`, dann
- * liefert Overpass nur einen Ausschnitt der Gegend. Vollständigkeit wird
- * nirgends behauptet; die Engine arbeitet mit dem, was da ist.
  */
 const MAX_RADIUS_M = 4500;
-const ELEMENT_LIMIT = 900;
+
+/**
+ * Die Suche beginnt klein und wächst nur, wenn es nötig ist.
+ *
+ * Warum: In einer dichten Innenstadt liegen im 4,5-km-Kasten rund 7900
+ * passende Orte – weit mehr, als eine Abfrage ausliefern kann. Früher wurde
+ * dann ein zusammenhängender Teil der Stadt abgeschnitten, oft genau die
+ * Umgebung des Nutzers: Am Brandenburger Tor fand ein Fußgänger-Plan gar
+ * nichts, obwohl ringsum hunderte Lokale liegen.
+ *
+ * Jetzt wird zuerst nur die nähere Umgebung geladen (vollständig, schnell).
+ * Reicht das nicht – Dorf, Stadtrand, weite Anreise –, wächst der Radius
+ * stufenweise, und die Ergebnisse werden zusammengeführt.
+ */
+const RADIUS_STUFEN = [1300, 2600, MAX_RADIUS_M] as const;
+
+/**
+ * Ab wann die nähere Umgebung genügt: genug Orte und genug verschiedene
+ * Arten, damit ein abwechslungsreicher Plan entstehen kann.
+ */
+const GENUG_ORTE = 45;
+const GENUG_ARTEN = 4;
 
 /**
  * Für Besichtigungstouren reicht ein kleinerer Umkreis – zu Fuß kommt man in
@@ -52,10 +69,16 @@ const SIGHTS_RADIUS_M = 2500;
 const SIGHTS_LIMIT = 500;
 
 /** Erhöhen, sobald sich ändert, welche Orte wie eingeordnet werden. */
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 
-/** Zellgröße des Caches (~2,2 km). Kleine Ortswechsel treffen denselben Cache. */
-const CACHE_CELL_DEGREES = 0.02;
+/**
+ * Zellgröße des Caches je Stufe. Die nahe Stufe braucht ein feines Raster
+ * (~0,5 km): Der geladene Kasten liegt dann auch im ungünstigsten Fall noch
+ * rund einen Kilometer um den Nutzer herum. Die weiten Stufen teilen sich
+ * größere Kacheln (~2,2 km), dort fällt der Versatz nicht ins Gewicht.
+ */
+const ZELLE_NAH = 0.005;
+const ZELLE_WEIT = 0.02;
 /**
  * Wie lange eine geladene Kachel gilt. Großzügig, weil sich die Orte einer
  * Gegend kaum ändern – und weil Öffnungszeiten ohnehin erst beim Planen gegen
@@ -107,15 +130,16 @@ export class OverpassPlaceProvider implements PlaceProvider {
   private inflight = new Map<string, Promise<Place[]>>();
 
   async search(query: PlaceQuery): Promise<Place[]> {
+    const theme = query.theme ?? 'places';
     const radius = Math.min(
       query.radiusMeters,
-      query.theme === 'sights' ? SIGHTS_RADIUS_M : MAX_RADIUS_M,
+      theme === 'sights' ? SIGHTS_RADIUS_M : MAX_RADIUS_M,
     );
-    const places = await this.loadWithinBudget(
-      query.center.lat,
-      query.center.lon,
+    const places = await this.sammeln(
+      query.center,
+      radius,
+      theme,
       query.maxWaitMs ?? INTERACTIVE_BUDGET_MS,
-      query.theme ?? 'places',
     );
 
     const filtered = places.filter((place) => {
@@ -133,16 +157,83 @@ export class OverpassPlaceProvider implements PlaceProvider {
   }
 
   /**
+   * Sammelt Orte in wachsenden Ringen: erst die nähere Umgebung, dann – nur
+   * falls dort zu wenig Brauchbares liegt – größere Stufen. Die Ergebnisse
+   * werden zusammengeführt, Doppelte fallen über die OSM-Kennung heraus.
+   *
+   * Schlägt eine spätere Stufe fehl oder reißt das Zeitbudget, bleibt es bei
+   * dem, was schon da ist – das ist besser als gar kein Ergebnis. Nur wenn
+   * die erste Stufe scheitert, wird der Fehler weitergereicht: Dann ist
+   * Overpass nicht erreichbar, und die Ersatzquelle soll übernehmen.
+   */
+  private async sammeln(
+    center: { lat: number; lon: number },
+    radius: number,
+    theme: Theme,
+    budgetMs: number,
+  ): Promise<Place[]> {
+    // Sehenswürdigkeiten kommen aus einer eigenen, bereits engen Abfrage.
+    if (theme === 'sights') {
+      return this.loadWithinBudget(center.lat, center.lon, budgetMs, theme, SIGHTS_RADIUS_M);
+    }
+
+    const beginn = Date.now();
+    const gesammelt = new Map<string, Place>();
+    const stufen = RADIUS_STUFEN.filter(
+      (stufe, i) => stufe <= radius || i === 0 || RADIUS_STUFEN[i - 1] < radius,
+    );
+
+    for (const [i, stufe] of stufen.entries()) {
+      const rest = budgetMs - (Date.now() - beginn);
+      if (i > 0 && rest < 1500) break;
+
+      try {
+        const batch = await this.loadWithinBudget(
+          center.lat,
+          center.lon,
+          i === 0 ? budgetMs : rest,
+          theme,
+          stufe,
+        );
+        for (const place of batch) gesammelt.set(place.id, place);
+      } catch (error) {
+        if (i === 0) throw error;
+        break;
+      }
+
+      if (this.genug(gesammelt, center, radius)) break;
+    }
+
+    return [...gesammelt.values()];
+  }
+
+  /** Genug Auswahl in Reichweite – oder muss der Ring größer werden? */
+  private genug(
+    places: Map<string, Place>,
+    center: { lat: number; lon: number },
+    radius: number,
+  ): boolean {
+    const inReichweite = [...places.values()].filter(
+      (place) => haversineMeters(center, place.location) <= radius,
+    );
+    if (inReichweite.length < GENUG_ORTE) return false;
+    return new Set(inReichweite.map((place) => place.category)).size >= GENUG_ARTEN;
+  }
+
+  /**
    * Lädt die Gegend im Hintergrund vor. Wird beim Öffnen der App aufgerufen,
    * damit „Jetzt los" später auf einen warmen Cache trifft. Fehler sind hier
    * bedeutungslos – es ist nur ein Vorabversuch.
+   *
+   * Vorgeladen wird genau das, was ein Klick danach braucht: dieselben Stufen
+   * in derselben Reihenfolge, nur ohne Zeitbudget.
    */
   async prefetch(
     center: { lat: number; lon: number },
     theme: Theme = 'places',
   ): Promise<void> {
     try {
-      await this.load(center.lat, center.lon, theme);
+      await this.sammeln(center, MAX_RADIUS_M, theme, Number.POSITIVE_INFINITY);
     } catch {
       /* Vorladen darf scheitern, ohne dass jemand es merkt. */
     }
@@ -157,8 +248,10 @@ export class OverpassPlaceProvider implements PlaceProvider {
     lon: number,
     budgetMs: number,
     theme: Theme,
+    radius: number,
   ): Promise<Place[]> {
-    const request = this.load(lat, lon, theme);
+    const request = this.load(lat, lon, theme, radius);
+    if (!Number.isFinite(budgetMs)) return request;
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const budget = new Promise<never>((_, reject) => {
@@ -175,23 +268,24 @@ export class OverpassPlaceProvider implements PlaceProvider {
     }
   }
 
-  /** Lädt eine ganze Zelle und legt sie in den Cache. */
-  private load(lat: number, lon: number, theme: Theme = 'places'): Promise<Place[]> {
-    const cellLat = Math.round(lat / CACHE_CELL_DEGREES) * CACHE_CELL_DEGREES;
-    const cellLon = Math.round(lon / CACHE_CELL_DEGREES) * CACHE_CELL_DEGREES;
-    // Ausgehorte behalten ihren bisherigen Schlüssel, Sehenswürdigkeiten
-    // bekommen ein Präfix – so bleiben bestehende Cache-Einträge gültig.
-    // Die Version steigt, wenn sich die Einordnung der Orte ändert – so
-    // verschwinden alte Einträge (etwa noch mit Fitnessstudios) aus dem Cache,
-    // statt 24 Stunden lang weiter ausgeliefert zu werden.
-    const cell = `${CACHE_VERSION}:${cellLat.toFixed(3)}:${cellLon.toFixed(3)}`;
+  /** Lädt eine Zelle einer Stufe und legt sie in den Cache. */
+  private load(lat: number, lon: number, theme: Theme, radius: number): Promise<Place[]> {
+    // Die nahe Stufe bekommt ein feineres Raster, damit die geladene Umgebung
+    // tatsächlich um den Nutzer liegt und nicht um eine weit entfernte Ecke.
+    const raster = radius <= RADIUS_STUFEN[0] ? ZELLE_NAH : ZELLE_WEIT;
+    const cellLat = Math.round(lat / raster) * raster;
+    const cellLon = Math.round(lon / raster) * raster;
+    // Die Version steigt, wenn sich die Einordnung der Orte oder der Zuschnitt
+    // der Abfrage ändert – so verschwinden alte Einträge aus dem Cache, statt
+    // 24 Stunden lang weiter ausgeliefert zu werden.
+    const cell = `${CACHE_VERSION}:${Math.round(radius)}:${cellLat.toFixed(3)}:${cellLon.toFixed(3)}`;
     const key = theme === 'sights' ? `sights:${cell}` : cell;
 
     // Parallele Anfragen auf dieselbe Zelle teilen sich einen Vorgang.
     const running = this.inflight.get(key);
     if (running) return running;
 
-    const request = this.loadCell(key, cellLat, cellLon, theme).finally(() => {
+    const request = this.loadCell(key, cellLat, cellLon, theme, radius).finally(() => {
       this.inflight.delete(key);
     });
 
@@ -207,20 +301,26 @@ export class OverpassPlaceProvider implements PlaceProvider {
     lat: number,
     lon: number,
     theme: Theme,
+    radius: number,
   ): Promise<Place[]> {
     const cached = await this.cache.get(key, CACHE_TTL_MS);
     if (cached) return cached;
 
-    const places = await this.fetchCell(lat, lon, theme);
+    const places = await this.fetchCell(lat, lon, theme, radius);
     await this.cache.set(key, places);
     return places;
   }
 
-  private async fetchCell(lat: number, lon: number, theme: Theme): Promise<Place[]> {
+  private async fetchCell(
+    lat: number,
+    lon: number,
+    theme: Theme,
+    radius: number,
+  ): Promise<Place[]> {
     const query =
       theme === 'sights'
         ? buildSightsQuery(lat, lon, SIGHTS_RADIUS_M, SIGHTS_LIMIT)
-        : buildOverpassQuery(lat, lon, MAX_RADIUS_M, ELEMENT_LIMIT);
+        : buildOverpassQuery(lat, lon, radius);
     const toModel = theme === 'sights' ? toSight : toPlace;
     let lastError: unknown = null;
 

@@ -153,15 +153,22 @@ function sportKind(tags: OsmTags): ProfileKey | null {
  * Entfernungsprüfung passiert danach bei uns – das Ergebnis ist identisch,
  * nur eben schnell genug für „Jetzt los".
  *
+ * Jede Art bekommt ein eigenes Kontingent statt eines gemeinsamen Limits.
+ * Grund: In dichten Innenstädten gibt es mehr Lokale als die Abfrage
+ * ausliefern darf (Berlin-Mitte: rund 7900 Treffer im 4,5-km-Kasten). Mit
+ * einem gemeinsamen Limit fielen ganze Arten hinten herunter – Parks und
+ * Museen kamen nach hunderten Restaurants gar nicht mehr vor.
+ *
+ * Ebenso bewusst ohne `qt`: Diese Sortierung ordnet räumlich, das Limit
+ * schneidet dann einen zusammenhängenden Streifen der Stadt ab – im
+ * schlimmsten Fall genau die Umgebung des Nutzers. Ohne `qt` liefert
+ * Overpass nach Objekt-Nummer; wird gekürzt, fehlen verstreute Einzelorte
+ * statt eines ganzen Viertels.
+ *
  * `nwr` deckt Nodes, Ways und Relations ab; `out center` liefert für Flächen
  * einen Mittelpunkt, damit wir überall mit Koordinaten rechnen können.
  */
-export function buildOverpassQuery(
-  lat: number,
-  lon: number,
-  radiusMeters: number,
-  limit = 700,
-): string {
+export function buildOverpassQuery(lat: number, lon: number, radiusMeters: number): string {
   const dLat = radiusMeters / 111_320;
   const dLon = radiusMeters / (111_320 * Math.cos((lat * Math.PI) / 180) || 1);
 
@@ -172,13 +179,23 @@ export function buildOverpassQuery(
     (lon + dLon).toFixed(5),
   ].join(',');
 
-  const filters = [
-    'nwr["amenity"~"^(restaurant|cafe|fast_food|ice_cream|bar|pub|biergarten|nightclub|cinema|theatre|arts_centre|casino|marketplace|public_bath)$"]["name"];',
-    'nwr["leisure"~"^(park|garden|nature_reserve|bowling_alley|escape_game|miniature_golf|amusement_arcade|adult_gaming_centre|water_park|swimming_pool|ice_rink|dance|beach_resort|sports_centre)$"]["name"];',
-    'nwr["tourism"~"^(museum|gallery|viewpoint|zoo|aquarium|theme_park|attraction)$"]["name"];',
-    'nwr["shop"~"^(mall|department_store)$"]["name"];',
-    'nwr["sport"="climbing"]["name"];',
-  ].join('\n  ');
+  // Kontingente: genug Auswahl je Art, zusammen klein genug für eine schnelle
+  // Antwort. Mehr als ein paar hundert Lokale in Laufweite braucht kein Plan.
+  const bloecke: Array<[string, number]> = [
+    [
+      'nwr["amenity"~"^(restaurant|cafe|fast_food|ice_cream|bar|pub|biergarten|nightclub|cinema|theatre|arts_centre|casino|marketplace|public_bath)$"]["name"]',
+      450,
+    ],
+    [
+      'nwr["leisure"~"^(park|garden|nature_reserve|bowling_alley|escape_game|miniature_golf|amusement_arcade|adult_gaming_centre|water_park|swimming_pool|ice_rink|dance|beach_resort|sports_centre)$"]["name"]',
+      200,
+    ],
+    ['nwr["tourism"~"^(museum|gallery|viewpoint|zoo|aquarium|theme_park|attraction)$"]["name"]', 200],
+    ['nwr["shop"~"^(mall|department_store)$"]["name"]', 60],
+    ['nwr["sport"="climbing"]["name"]', 40],
+  ];
 
-  return `[out:json][timeout:25][bbox:${bbox}];\n(\n  ${filters}\n);\nout center qt ${limit};`;
+  const teile = bloecke.map(([filter, limit]) => `${filter};
+out center ${limit};`).join('\n');
+  return `[out:json][timeout:25][bbox:${bbox}];\n${teile}`;
 }
