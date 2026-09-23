@@ -22,6 +22,9 @@ export async function GET(request: Request) {
   const checks: Record<string, unknown> = {
     databaseUrlGesetzt: isPersistent(),
     ortsquelle: getProviders().places.id,
+    // Welcher Stand läuft gerade? Ohne das ist von außen nicht zu erkennen,
+    // ob ein Deployment schon durch ist.
+    version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'lokal',
   };
 
   // Optional: Lesetest auf den geteilten Ortscache, z. B. ?cell=53.560:10.000
