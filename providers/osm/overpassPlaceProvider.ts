@@ -51,7 +51,7 @@ const MAX_RADIUS_M = 4500;
  * Reicht das nicht – Dorf, Stadtrand, weite Anreise –, wächst der Radius
  * stufenweise, und die Ergebnisse werden zusammengeführt.
  */
-const RADIUS_STUFEN = [1300, 2600, MAX_RADIUS_M] as const;
+const RADIUS_STUFEN = [1100, 2400, MAX_RADIUS_M] as const;
 
 /**
  * Ab wann die nähere Umgebung genügt: genug Orte und genug verschiedene
@@ -103,7 +103,7 @@ const MIRROR_TIMEOUT_MS = 8000;
  * Im Normalfall greift das gar nicht – die App lädt die Gegend schon beim
  * Öffnen vor (siehe `prefetch`), der Klick trifft dann den Cache.
  */
-const INTERACTIVE_BUDGET_MS = 9000;
+const INTERACTIVE_BUDGET_MS = 11_000;
 
 /**
  * Echte Orte aus OpenStreetMap über die Overpass-API.

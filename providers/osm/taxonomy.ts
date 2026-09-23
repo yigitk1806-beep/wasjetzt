@@ -184,14 +184,14 @@ export function buildOverpassQuery(lat: number, lon: number, radiusMeters: numbe
   const bloecke: Array<[string, number]> = [
     [
       'nwr["amenity"~"^(restaurant|cafe|fast_food|ice_cream|bar|pub|biergarten|nightclub|cinema|theatre|arts_centre|casino|marketplace|public_bath)$"]["name"]',
-      450,
+      300,
     ],
     [
       'nwr["leisure"~"^(park|garden|nature_reserve|bowling_alley|escape_game|miniature_golf|amusement_arcade|adult_gaming_centre|water_park|swimming_pool|ice_rink|dance|beach_resort|sports_centre)$"]["name"]',
-      200,
+      150,
     ],
-    ['nwr["tourism"~"^(museum|gallery|viewpoint|zoo|aquarium|theme_park|attraction)$"]["name"]', 200],
-    ['nwr["shop"~"^(mall|department_store)$"]["name"]', 60],
+    ['nwr["tourism"~"^(museum|gallery|viewpoint|zoo|aquarium|theme_park|attraction)$"]["name"]', 150],
+    ['nwr["shop"~"^(mall|department_store)$"]["name"]', 30],
     ['nwr["sport"="climbing"]["name"]', 40],
   ];
 
