@@ -23,7 +23,15 @@ const CATEGORIES: Category[] = [
   'nature', 'sport', 'gaming', 'wellness', 'shopping', 'event',
 ];
 
-export class RequestError extends Error {}
+/** Ungültige Anfrage – mit Code, den die Oberfläche übersetzt. */
+export class RequestError extends Error {
+  constructor(
+    readonly code: 'location-missing' | 'location-invalid',
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 function pick<T extends string>(value: unknown, allowed: T[], fallback: T): T {
   return typeof value === 'string' && (allowed as string[]).includes(value)
@@ -60,10 +68,10 @@ export function normalizePlanRequest(raw: unknown): PlanRequest {
   const lat = num(input.lat);
   const lon = num(input.lon);
   if (lat === undefined || lon === undefined) {
-    throw new RequestError('Standort fehlt.');
+    throw new RequestError('location-missing', 'Standort fehlt.');
   }
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-    throw new RequestError('Standort ist ungültig.');
+    throw new RequestError('location-invalid', 'Standort ist ungültig.');
   }
 
   const startISO = isoOrUndefined(input.startISO) ?? new Date().toISOString();

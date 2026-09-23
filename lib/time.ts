@@ -1,3 +1,4 @@
+import { dictionaryFor } from '@/lib/i18n';
 import type { OpeningHours, Season, Weekday } from '@/types/domain';
 
 /**
@@ -60,13 +61,7 @@ export function formatClock(iso: string, locale = 'de', offsetMin?: number): str
  */
 export function formatDuration(minutes: number, locale = 'de'): string {
   const gerundet = Math.max(0, Math.round(minutes));
-  const h = Math.floor(gerundet / 60);
-  const m = gerundet % 60;
-  const deutsch = locale.startsWith('de');
-
-  if (h === 0) return deutsch ? `${m} Min.` : `${m} min`;
-  if (m === 0) return deutsch ? `${h} Std.` : `${h} h`;
-  return deutsch ? `${h} Std. ${m} Min.` : `${h} h ${m} min`;
+  return dictionaryFor(locale).units.duration(Math.floor(gerundet / 60), gerundet % 60);
 }
 
 export function weekdayOf(date: Date, offsetMin: number): Weekday {
@@ -192,18 +187,6 @@ export function localClock(date: Date, offsetMin: number): string {
 export function localDayDiff(date: Date, reference: Date, offsetMin: number): number {
   const tag = (d: Date) => Math.floor((d.getTime() + offsetMin * 60_000) / 86_400_000);
   return tag(date) - tag(reference);
-}
-
-const WOCHENTAG = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
-
-/** "Heute", "Morgen" oder der Wochentag – in Ortszeit des Plans. */
-export function dayLabel(iso: string, offsetMin: number, now = new Date()): string {
-  const date = new Date(iso);
-  const diff = localDayDiff(date, now, offsetMin);
-  if (diff === 0) return 'Heute';
-  if (diff === 1) return 'Morgen';
-  if (diff === -1) return 'Gestern';
-  return WOCHENTAG[weekdayOf(date, offsetMin)];
 }
 
 /** Auf fünf Minuten aufrunden – „jetzt" wird nicht auf die Viertelstunde verschoben. */

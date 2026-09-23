@@ -1,3 +1,4 @@
+import type { Dictionary } from '@/lib/i18n';
 import type {
   Category,
   Coordinates,
@@ -116,6 +117,9 @@ export interface BookingProvider {
  * Übersetzt Freitext in Planparameter. Default ist eine regelbasierte
  * Implementierung ohne externe API; ein LLM-Provider kann hier andocken.
  */
+/** Ein verstandener Punkt aus dem Freitext, z. B. { key: 'homeBy', args: ['22:00'] }. */
+export type UnderstoodToken = { key: keyof Dictionary['understood']; args?: Array<string | number> };
+
 export interface LanguageProvider {
   readonly id: string;
   parse(text: string, locale: string): Promise<ParsedIntent>;
@@ -139,5 +143,7 @@ export type ParsedIntent = {
   maxDistanceMeters?: number;
   /** Was der Parser tatsächlich verstanden hat – für die UI. */
   understood: string[];
+  /** Dasselbe als Schlüssel – die Oberfläche zeigt es in der Sprache des Nutzers. */
+  understoodTokens?: UnderstoodToken[];
   confidence: number;
 };

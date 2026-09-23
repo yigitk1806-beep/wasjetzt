@@ -7,11 +7,12 @@ import {
   TimeField,
   clockFromMin,
   minutesOf,
-  jetztText,
   nextQuarter,
-  startLabel,
+  startDay,
   useNowClock,
 } from '@/components/ui/TimeField';
+import { useLocale } from '@/components/LocaleProvider';
+import { errorText } from '@/lib/i18n/format';
 import { localClock, localDayDiff } from '@/lib/time';
 import { retimePlan } from '@/lib/planClient';
 import type { Plan } from '@/types/domain';
@@ -29,6 +30,7 @@ type Props = {
  * mehr passen, tauscht der Server aus.
  */
 export function TimeSheet({ plan, open, onClose, onPlanChange }: Props) {
+  const { t } = useLocale();
   const jetzt = useNowClock();
   const [start, setStart] = useState<string | null>(null);
   const [home, setHome] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export function TimeSheet({ plan, open, onClose, onPlanChange }: Props) {
       onClose();
       return;
     }
-    setError(result.message ?? result.error ?? 'Das hat nicht geklappt.');
+    setError(errorText(t, result));
   }
 
   const tz = plan.tzOffsetMin ?? 0;
@@ -66,27 +68,28 @@ export function TimeSheet({ plan, open, onClose, onPlanChange }: Props) {
   );
 
   return (
-    <Sheet open={open} onClose={() => (busy ? undefined : onClose())} title="Zeit ändern">
+    <Sheet open={open} onClose={() => (busy ? undefined : onClose())} title={t.time.sheetTitle}>
       <div className="space-y-2.5">
         <TimeField
           icon="🕐"
-          label="Wann starten?"
+          label={t.time.startLabel}
           value={start}
-          emptyText={jetztText(jetzt)}
-          valueText={(v) => startLabel(v)}
-          actionText="Startzeit ändern"
-          resetText="Jetzt"
+          emptyText={jetzt ? t.time.nowAt(jetzt) : t.time.now}
+          valueText={(v) => t.time.startValue(startDay(v), v)}
+          actionText={t.time.changeStart}
+          resetText={t.time.now}
           pickerDefault={nextQuarter(jetzt)}
           onChange={setStart}
         />
         <TimeField
           icon="🏠"
-          label="Zuhause bis"
+          label={t.time.homeLabel}
           value={home}
-          emptyText="Keine feste Endzeit"
-          valueText={(v) => `${v} Uhr`}
-          actionText="Festlegen"
-          resetText="Keine"
+          emptyText={t.time.homeNone}
+          valueText={(v) => t.time.homeValue(v)}
+          actionText={t.time.homeSet}
+          changeText={t.time.change}
+          resetText={t.time.homeClear}
           pickerDefault={heimVorschlag}
           commitOnBlur
           onChange={setHome}
@@ -94,9 +97,8 @@ export function TimeSheet({ plan, open, onClose, onPlanChange }: Props) {
       </div>
 
       <p className="mt-3 text-[0.8rem] leading-relaxed text-ink-muted">
-        {tagOffset > 0 ? 'Der Plan liegt auf morgen. ' : ''}
-        Die Stationen bleiben – nur was zur neuen Zeit geschlossen hat oder nicht mehr passt,
-        wird ersetzt.
+        {tagOffset > 0 ? `${t.time.sheetTomorrow} ` : ''}
+        {t.time.sheetNote}
       </p>
 
       {error ? (
@@ -104,8 +106,8 @@ export function TimeSheet({ plan, open, onClose, onPlanChange }: Props) {
       ) : null}
 
       <div className="mt-4">
-        <Button size="lg" full loading={busy} loadingLabel="Wird verschoben" onClick={() => void uebernehmen()}>
-          Übernehmen
+        <Button size="lg" full loading={busy} loadingLabel={t.time.applying} onClick={() => void uebernehmen()}>
+          {t.time.apply}
         </Button>
       </div>
     </Sheet>

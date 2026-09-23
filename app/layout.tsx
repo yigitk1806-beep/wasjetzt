@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { BottomNav } from '@/components/BottomNav';
 import { LocaleProvider } from '@/components/LocaleProvider';
+import { dictionaryFor } from '@/lib/i18n';
+import { requestLocale } from '@/lib/i18n/server';
 import './globals.css';
 
 const inter = Inter({
@@ -10,14 +12,18 @@ const inter = Inter({
   variable: '--font-sans',
 });
 
-export const metadata: Metadata = {
-  title: 'WasJetzt – Mehr erleben. Weniger planen.',
-  description:
-    'WasJetzt schlägt dir in Sekunden vor, was ihr jetzt machen könnt – passend zu Uhrzeit, Wetter, Budget und Umgebung.',
-  applicationName: 'WasJetzt',
-  appleWebApp: { capable: true, title: 'WasJetzt', statusBarStyle: 'default' },
-  formatDetection: { telephone: false },
-};
+/** Titel und Beschreibung in der Sprache des Besuchers. */
+export async function generateMetadata(): Promise<Metadata> {
+  const { locale } = await requestLocale();
+  const t = dictionaryFor(locale);
+  return {
+    title: t.meta.title,
+    description: t.meta.description,
+    applicationName: 'WasJetzt',
+    appleWebApp: { capable: true, title: 'WasJetzt', statusBarStyle: 'default' },
+    formatDetection: { telephone: false },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: '#fbf8f5',
@@ -27,11 +33,12 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const { locale, chosen } = await requestLocale();
   return (
-    <html lang="de" className={inter.variable}>
+    <html lang={locale} className={inter.variable}>
       <body>
-        <LocaleProvider>
+        <LocaleProvider initialLocale={locale} chosen={chosen}>
           <div className="min-h-dvh pb-24">{children}</div>
           <BottomNav />
         </LocaleProvider>

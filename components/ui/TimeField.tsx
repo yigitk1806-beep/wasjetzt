@@ -21,8 +21,10 @@ type Props = {
   emptyText: string;
   /** Text bei gesetzter Uhrzeit. */
   valueText: (value: string) => string;
-  /** Aufforderung rechts, etwa „Startzeit ändern". */
+  /** Aufforderung, etwa „Startzeit ändern". */
   actionText: string;
+  /** Aufforderung, wenn schon eine Uhrzeit gewählt ist („Ändern"). */
+  changeText?: string;
   /** Beschriftung zum Zurücksetzen, etwa „Jetzt". */
   resetText: string;
   onChange: (value: string | null) => void;
@@ -44,6 +46,7 @@ export function TimeField({
   emptyText,
   valueText,
   actionText,
+  changeText,
   resetText,
   onChange,
   pickerDefault,
@@ -113,7 +116,9 @@ export function TimeField({
       <span className="min-w-0 flex-1">
         <span className="block text-[0.76rem] font-medium text-ink-muted">{label}</span>
         <span className="block truncate text-[1.02rem] font-semibold tabular-nums">{text}</span>
-        <span className="mt-0.5 block text-[0.76rem] font-semibold text-brand-600">{actionText}</span>
+        <span className="mt-0.5 block text-[0.76rem] font-semibold text-brand-600">
+          {value ? (changeText ?? actionText) : actionText}
+        </span>
       </span>
       {zuruecksetzen}
       {input}
@@ -137,9 +142,10 @@ export function useNowClock(): string {
   return jetzt;
 }
 
-/** "Jetzt · 07:35" – solange die Uhrzeit noch nicht bekannt ist, nur "Jetzt". */
-export function jetztText(jetzt: string, prefix = 'Jetzt'): string {
-  return jetzt ? `${prefix} · ${jetzt}` : prefix;
+/** Liegt die Uhrzeit heute noch vor uns oder ist morgen gemeint? (aus Sicht des Geräts) */
+export function startDay(clock: string, now = new Date()): 'today' | 'tomorrow' {
+  const jetzt = now.getHours() * 60 + now.getMinutes();
+  return minutesOf(clock) < jetzt - 10 ? 'tomorrow' : 'today';
 }
 
 export function clockOf(date: Date): string {
@@ -154,12 +160,6 @@ export function minutesOf(clock: string): number {
 export function clockFromMin(min: number): string {
   const m = ((Math.round(min) % 1440) + 1440) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-}
-
-/** "Heute · 14:30" oder "Morgen · 09:00" – aus Sicht des Geräts. */
-export function startLabel(clock: string, now = new Date()): string {
-  const jetzt = now.getHours() * 60 + now.getMinutes();
-  return `${minutesOf(clock) < jetzt - 10 ? 'Morgen' : 'Heute'} · ${clock}`;
 }
 
 /** Nächste Viertelstunde nach `jetzt` – Vorschlag für den Startzeit-Picker. */

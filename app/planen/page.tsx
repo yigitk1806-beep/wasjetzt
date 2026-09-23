@@ -10,66 +10,56 @@ import { ArrowRight } from '@/components/ui/icons';
 import {
   TimeField,
   clockFromMin,
-  jetztText,
   minutesOf,
   nextQuarter,
-  startLabel,
+  startDay,
   startMinutes,
   useNowClock,
 } from '@/components/ui/TimeField';
+import { duration, errorText } from '@/lib/i18n/format';
+import type { UnderstoodToken } from '@/providers/types';
 import { useLocale } from '@/components/LocaleProvider';
 import { useLocation } from '@/hooks/useLocation';
 import { loadPreferences } from '@/lib/clientStore';
 import { requestPlanStreamed, type PlanPhase } from '@/lib/planClient';
 import type { BudgetPreset, Mobility, Mood, Party } from '@/types/domain';
 
-const PARTIES: Array<{ value: Party; emoji: string; label: string }> = [
-  { value: 'solo', emoji: '👤', label: 'Alleine' },
-  { value: 'partner', emoji: '❤️', label: 'Zu zweit' },
-  { value: 'friends', emoji: '👥', label: 'Freunde' },
-  { value: 'family', emoji: '👨‍👩‍👧', label: 'Familie' },
+const PARTIES: Array<{ value: Party; emoji: string }> = [
+  { value: 'solo', emoji: '👤' },
+  { value: 'partner', emoji: '❤️' },
+  { value: 'friends', emoji: '👥' },
+  { value: 'family', emoji: '👨‍👩‍👧' },
 ];
 
-const TIMES: Array<{ minutes: number; label: string }> = [
-  { minutes: 90, label: '1–2 Std.' },
-  { minutes: 180, label: '2–4 Std.' },
-  { minutes: 300, label: '4–6 Std.' },
-  { minutes: 480, label: 'Ganzer Tag' },
+const TIMES = [{ minutes: 90 }, { minutes: 180 }, { minutes: 300 }, { minutes: 480 }] as const;
+
+const BUDGETS: BudgetPreset[] = ['free', 'low', 'medium', 'high', 'any'];
+
+const MOODS: Array<{ value: Mood; emoji: string }> = [
+  { value: 'date', emoji: '❤️' },
+  { value: 'action', emoji: '🔥' },
+  { value: 'chill', emoji: '😌' },
+  { value: 'party', emoji: '🎉' },
+  { value: 'food', emoji: '🍔' },
+  { value: 'nature', emoji: '🌳' },
+  { value: 'gaming', emoji: '🎮' },
+  { value: 'new', emoji: '🆕' },
 ];
 
-const BUDGETS: Array<{ value: BudgetPreset; label: string }> = [
-  { value: 'free', label: 'Kostenlos' },
-  { value: 'low', label: 'bis 20 €' },
-  { value: 'medium', label: 'bis 50 €' },
-  { value: 'high', label: 'bis 100 €' },
-  { value: 'any', label: 'Egal' },
-];
-
-const MOODS: Array<{ value: Mood; emoji: string; label: string }> = [
-  { value: 'date', emoji: '❤️', label: 'Date' },
-  { value: 'action', emoji: '🔥', label: 'Action' },
-  { value: 'chill', emoji: '😌', label: 'Entspannt' },
-  { value: 'party', emoji: '🎉', label: 'Party' },
-  { value: 'food', emoji: '🍔', label: 'Essen' },
-  { value: 'nature', emoji: '🌳', label: 'Natur' },
-  { value: 'gaming', emoji: '🎮', label: 'Gaming' },
-  { value: 'new', emoji: '🆕', label: 'Neu' },
-];
-
-const MOBILITY: Array<{ value: Mobility; emoji: string; label: string }> = [
-  { value: 'walk', emoji: '🚶', label: 'Fuß' },
-  { value: 'bike', emoji: '🚲', label: 'Rad' },
-  { value: 'transit', emoji: '🚇', label: 'Bus & Bahn' },
-  { value: 'car', emoji: '🚗', label: 'Auto' },
+const MOBILITY: Array<{ value: Mobility; emoji: string }> = [
+  { value: 'walk', emoji: '🚶' },
+  { value: 'bike', emoji: '🚲' },
+  { value: 'transit', emoji: '🚇' },
+  { value: 'car', emoji: '🚗' },
 ];
 
 export default function BuildPlanPage() {
   const router = useRouter();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const { location } = useLocation();
 
   const [rawText, setRawText] = useState('');
-  const [understood, setUnderstood] = useState<string[]>([]);
+  const [understood, setUnderstood] = useState<UnderstoodToken[]>([]);
   const [party, setParty] = useState<Party>('friends');
   const [minutes, setMinutes] = useState(180);
   const [budget, setBudget] = useState<BudgetPreset>('any');
@@ -105,12 +95,12 @@ export default function BuildPlanPage() {
       fetch('/api/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: rawText }),
+        body: JSON.stringify({ text: rawText, locale }),
         signal: controller.signal,
       })
         .then((res) => res.json())
         .then((data) => {
-          setUnderstood(data.understood ?? []);
+          setUnderstood(data.understoodTokens ?? []);
           applyIntent(data);
         })
         .catch(() => undefined);
@@ -188,7 +178,7 @@ export default function BuildPlanPage() {
     }
     setBusy(false);
     setPhase(null);
-    setError(response.message ?? response.error ?? t.plan.empty);
+    setError(errorText(t, response));
   }
 
   return (
@@ -235,14 +225,18 @@ export default function BuildPlanPage() {
                 exit={{ opacity: 0, height: 0 }}
                 className="flex flex-wrap gap-1.5 overflow-hidden pt-0.5"
               >
-                {understood.map((item) => (
-                  <span
-                    key={item}
-                    className="rounded-full bg-mint-100 px-2.5 py-1 text-[0.76rem] font-medium text-mint-700"
-                  >
-                    ✓ {item}
-                  </span>
-                ))}
+                {understood.map((token) => {
+                  const eintrag = t.understood[token.key] as string | ((...a: Array<string | number>) => string);
+                  const text = typeof eintrag === 'function' ? eintrag(...(token.args ?? [])) : eintrag;
+                  return (
+                    <span
+                      key={`${token.key}-${(token.args ?? []).join('-')}`}
+                      className="rounded-full bg-mint-100 px-2.5 py-1 text-[0.76rem] font-medium text-mint-700"
+                    >
+                      ✓ {text}
+                    </span>
+                  );
+                })}
               </motion.div>
             ) : null}
           </AnimatePresence>
@@ -257,7 +251,7 @@ export default function BuildPlanPage() {
                 selected={party === option.value}
                 onClick={() => setParty(option.value)}
               >
-                {option.label}
+                {t.build.parties[option.value]}
               </Chip>
             ))}
           </div>
@@ -274,7 +268,7 @@ export default function BuildPlanPage() {
                   setMinutesTouched(true);
                 }}
               >
-                {option.label}
+                {t.build.times[option.minutes]}
               </Chip>
             ))}
           </div>
@@ -284,11 +278,11 @@ export default function BuildPlanPage() {
           <div className="flex flex-wrap gap-2">
             {BUDGETS.map((option) => (
               <Chip
-                key={option.value}
-                selected={budget === option.value}
-                onClick={() => setBudget(option.value)}
+                key={option}
+                selected={budget === option}
+                onClick={() => setBudget(option)}
               >
-                {option.label}
+                {t.build.budgets[option]}
               </Chip>
             ))}
           </div>
@@ -309,7 +303,7 @@ export default function BuildPlanPage() {
                   )
                 }
               >
-                {option.label}
+                {t.build.moods[option.value]}
               </Chip>
             ))}
           </div>
@@ -325,8 +319,8 @@ export default function BuildPlanPage() {
               {t.build.more}
               {startAt || homeBy ? (
                 <span className="font-semibold text-brand-600">
-                  {startAt ? ` · Start ${startAt}` : ''}
-                  {homeBy ? ` · Zuhause ${homeBy}` : ''}
+                  {startAt ? ` · ${t.build.summaryStart(startAt)}` : ''}
+                  {homeBy ? ` · ${t.build.summaryHome(homeBy)}` : ''}
                 </span>
               ) : null}
             </span>
@@ -359,23 +353,24 @@ export default function BuildPlanPage() {
                 <div className="space-y-2.5">
                   <TimeField
                     icon="🕐"
-                    label="Wann starten?"
+                    label={t.time.startLabel}
                     value={startAt}
-                    emptyText={jetztText(jetzt)}
-                    valueText={(v) => startLabel(v)}
-                    actionText="Startzeit ändern"
-                    resetText="Jetzt"
+                    emptyText={jetzt ? t.time.nowAt(jetzt) : t.time.now}
+                    valueText={(v) => t.time.startValue(startDay(v), v)}
+                    actionText={t.time.changeStart}
+                    resetText={t.time.now}
                     pickerDefault={nextQuarter(jetzt)}
                     onChange={setStartAt}
                   />
                   <TimeField
                     icon="🏠"
-                    label={t.build.homeBy}
+                    label={t.time.homeLabel}
                     value={homeBy}
-                    emptyText="Keine feste Endzeit"
-                    valueText={(v) => `${v} Uhr`}
-                    actionText="Festlegen"
-                    resetText="Keine"
+                    emptyText={t.time.homeNone}
+                    valueText={(v) => t.time.homeValue(v)}
+                    actionText={t.time.homeSet}
+            changeText={t.time.change}
+                    resetText={t.time.homeClear}
                     pickerDefault={clockFromMin(Math.round(((startMin ?? 720) + 240) / 60) * 60)}
                     commitOnBlur
                     onChange={setHomeBy}
@@ -383,8 +378,8 @@ export default function BuildPlanPage() {
                   {fensterMin !== null ? (
                     <p className="px-1 text-[0.78rem] text-ink-muted">
                       {fensterMin < 60
-                        ? 'Das ist sehr knapp – mit Hin- und Rückweg bleibt kaum Zeit.'
-                        : `Bis dahin bleiben ${Math.floor(fensterMin / 60)} Std.${fensterMin % 60 ? ` ${fensterMin % 60} Min.` : ''} – der Rückweg wird eingerechnet.`}
+                        ? t.build.windowTight
+                        : t.build.windowLeft(duration(t, fensterMin))}
                     </p>
                   ) : null}
                 </div>
@@ -398,7 +393,7 @@ export default function BuildPlanPage() {
                         selected={mobility === option.value}
                         onClick={() => setMobility(option.value)}
                       >
-                        {option.label}
+                        {t.build.mobilities[option.value]}
                       </Chip>
                     ))}
                   </div>
@@ -430,7 +425,7 @@ export default function BuildPlanPage() {
             size="lg"
             full
             loading={busy}
-            loadingLabel="Plan wird erstellt"
+            loadingLabel={t.build.submitting}
             trailingIcon={<ArrowRight size={19} className="opacity-90" />}
             onClick={() => void submit()}
           >

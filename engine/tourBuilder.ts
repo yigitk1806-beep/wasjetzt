@@ -3,6 +3,7 @@ import { shortId } from '@/lib/id';
 import { formatClock, isOpenDuring, localDayDiff, localHour } from '@/lib/time';
 import type { Coordinates, Place, Plan, PlanStep, SightTheme } from '@/types/domain';
 import { assemblePlan, homeLeg, roundToFive, weatherAt } from './planBuilder';
+import { begruendung, note, type ReasonKey } from './texts';
 import type { PlanContext } from './types';
 import { fitsTimeOfDay } from './timeOfDay';
 import { isWeatherBlocked, weatherFit, weatherModeOf } from './weatherRules';
@@ -329,11 +330,17 @@ function pickNextSight(options: PickOptions): Pick | null {
   }
 
   if (best) {
-    best.step.reason = tourReason(
-      best.step.place,
-      weatherAt(ctx.weather, best.step.startISO),
-      best.step.travelFromPrevious.durationMin,
-      options.usedReasons ?? new Set(),
+    Object.assign(
+      best.step,
+      begruendung(
+        ctx,
+        tourReason(
+          best.step.place,
+          weatherAt(ctx.weather, best.step.startISO),
+          best.step.travelFromPrevious.durationMin,
+          options.usedReasons ?? new Set(),
+        ),
+      ),
     );
   }
   return best;
@@ -390,7 +397,7 @@ function pickBreak(
           },
           price: { ...place.price },
           openingHoursKnown: true,
-          reason: mittag ? 'Mittagspause in der Nähe.' : 'Kurze Pause zum Auftanken.',
+          ...begruendung(ctx, mittag ? 'lunch' : 'break'),
         },
       };
     }
@@ -423,29 +430,29 @@ function tourReason(
   weather: ReturnType<typeof weatherAt>,
   travelMin: number,
   usedReasons: Set<string>,
-): string {
+): ReasonKey {
   const themes = place.themes ?? [];
   const mode = weatherModeOf(weather);
   const bekanntheit = place.prominence ?? 0;
-  const kandidaten: Array<string | false | undefined> = [
-    mode === 'wet' && place.indoorOutdoor === 'indoor' && 'Drinnen – passt zum Regen.',
-    bekanntheit >= 0.6 && 'Einer der bekanntesten Orte der Stadt.',
-    place.notable && bekanntheit >= 0.25 && 'Ein Klassiker der Stadt.',
-    themes.includes('hidden') && 'Ein Geheimtipp abseits der großen Ziele.',
-    place.kind === 'Gedenkort' && 'Ein Ort zum Innehalten.',
-    (place.kind === 'Museum' || place.kind === 'Galerie') && 'Drinnen gibt es viel zu entdecken.',
-    themes.includes('photo') && mode === 'pleasant' && 'Gutes Licht für Fotos.',
-    themes.includes('park') && 'Zum Durchatmen zwischendurch.',
-    travelMin <= 5 && 'Nur ein paar Schritte weiter.',
-    place.notable && 'Bekannt in der Stadt – und gut erreichbar.',
+  const kandidaten: Array<ReasonKey | false | undefined> = [
+    mode === 'wet' && place.indoorOutdoor === 'indoor' && 'wetIndoor',
+    bekanntheit >= 0.6 && 'famous',
+    place.notable && bekanntheit >= 0.25 && 'classic',
+    themes.includes('hidden') && 'hidden',
+    place.kind === 'Gedenkort' && 'memorial',
+    (place.kind === 'Museum' || place.kind === 'Galerie') && 'museum',
+    themes.includes('photo') && mode === 'pleasant' && 'photo',
+    themes.includes('park') && 'park',
+    travelMin <= 5 && 'fewSteps',
+    place.notable && 'known',
   ];
-  for (const satz of kandidaten) {
-    if (satz && !usedReasons.has(satz)) {
-      usedReasons.add(satz);
-      return satz;
+  for (const key of kandidaten) {
+    if (key && !usedReasons.has(key)) {
+      usedReasons.add(key);
+      return key;
     }
   }
-  return 'Liegt gut auf dem Weg.';
+  return 'onTheWay';
 }
 
 /**
@@ -505,25 +512,16 @@ export function buildTour(ctx: PlanContext): Plan | null {
 
   const plan = assemblePlan(ctx, result, 'balanced', 0);
   if (wegenRegen) {
-    plan.notes.unshift({
-      kind: 'weather',
-      text: `Anfangs regnet es – die Tour beginnt deshalb um ${formatClock(
-        tourCtx.start.toISOString(),
-        'de',
-        ctx.tzOffsetMin,
-      )}, wenn mehr drinnen offen hat.`,
-    });
+    plan.notes.unshift(
+      note(ctx, 'weather', 'tourRainStart', {
+        time: formatClock(tourCtx.start.toISOString(), 'de', ctx.tzOffsetMin),
+      }),
+    );
   } else if (verschobenUm > 0) {
-    plan.notes.unshift({
-      kind: 'time',
-      text: `Um diese Uhrzeit hat noch kaum etwas geöffnet – die Tour beginnt deshalb später.`,
-    });
+    plan.notes.unshift(note(ctx, 'time', 'tourLateStart'));
   }
   if (erweitert) {
-    plan.notes.unshift({
-      kind: 'info',
-      text: 'Zu deiner Auswahl gab es hier wenig – ergänzt um weitere Sehenswürdigkeiten.',
-    });
+    plan.notes.unshift(note(ctx, 'info', 'tourExtended'));
   }
   return plan;
 }
@@ -637,7 +635,9 @@ export function replaceTourStop(
   for (const s of plan.steps) {
     if (s.id !== stepId) kinds.set(s.place.kind, (kinds.get(s.place.kind) ?? 0) + 1);
   }
-  const usedReasons = new Set(plan.steps.filter((s) => s.id !== stepId).map((s) => s.reason));
+  const usedReasons = new Set(
+    plan.steps.filter((s) => s.id !== stepId).map((s) => s.reasonKey ?? s.reason),
+  );
 
   const picked = istPause
     ? pickBreak(ctx, from, cursor, used, tourEnd)

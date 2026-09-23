@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'motion/react';
+import { useLocale } from '@/components/LocaleProvider';
 
 type Props = {
   onClick: () => void;
@@ -14,6 +15,7 @@ type Props = {
  * die eigene Stadt anzuschauen.
  */
 export function DiscoverCard({ onClick, disabled = false, delay = 0 }: Props) {
+  const { t } = useLocale();
   return (
     <motion.button
       type="button"
@@ -43,9 +45,9 @@ export function DiscoverCard({ onClick, disabled = false, delay = 0 }: Props) {
       </span>
 
       <span className="relative min-w-0 flex-1">
-        <span className="block text-[1.05rem] font-bold tracking-tight">Sehenswürdigkeiten</span>
+        <span className="block text-[1.05rem] font-bold tracking-tight">{t.home.discover}</span>
         <span className="mt-0.5 block text-[0.85rem] leading-snug text-ink-muted">
-          Entdecke deine Stadt – als fertige Tour
+          {t.home.discoverHint}
         </span>
       </span>
 

@@ -2,9 +2,11 @@
 
 import { useEffect, useRef } from 'react';
 import type * as LeafletNS from 'leaflet';
-import { formatDistance, haversineMeters } from '@/lib/geo';
-import { formatDuration } from '@/lib/time';
+import { haversineMeters } from '@/lib/geo';
 import { decodePolyline, wegSumme } from '@/lib/wege';
+import { useLocale } from '@/components/LocaleProvider';
+import { distance, duration } from '@/lib/i18n/format';
+import type { Dictionary } from '@/lib/i18n';
 import type { Coordinates, Mobility, Plan, PlanStep } from '@/types/domain';
 import 'leaflet/dist/leaflet.css';
 
@@ -30,13 +32,6 @@ const TILE_ATTRIBUTION =
 
 const ORANGE = '#f15c1c';
 
-const UNTERWEGS: Record<Mobility, string> = {
-  walk: 'zu Fuß',
-  bike: 'mit dem Rad',
-  transit: 'mit Bus & Bahn',
-  car: 'mit dem Auto',
-};
-
 /**
  * Echte Karte der Stationen. Leaflet wird erst im Browser geladen (~42 kB),
  * damit die Plan-Seite sofort sichtbar ist und die Karte nachrückt.
@@ -47,6 +42,7 @@ const UNTERWEGS: Record<Mobility, string> = {
  * Luftlinie, und die Beschriftung sagt das auch.
  */
 export function PlanMap({ origin, steps, mobility, returnHome, home }: Props) {
+  const { t } = useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletNS.Map | null>(null);
 
@@ -164,11 +160,11 @@ export function PlanMap({ origin, steps, mobility, returnHome, home }: Props) {
         ref={containerRef}
         className="h-52 w-full bg-canvas-sunk"
         role="img"
-        aria-label={`Karte mit ${steps.length} Stationen`}
+        aria-label={t.map.aria(steps.length)}
       />
       <div className="flex items-center justify-between gap-2 px-4 py-3">
         <span className="min-w-0 text-[0.78rem] text-ink-muted">
-          {wegText(origin, steps, mobility, returnHome)}
+          {wegText(t, origin, steps, mobility, returnHome)}
         </span>
         <a
           href={mapsUrl(origin, steps, mobility)}
@@ -176,7 +172,7 @@ export function PlanMap({ origin, steps, mobility, returnHome, home }: Props) {
           rel="noopener noreferrer"
           className="tap shrink-0 rounded-xl bg-canvas-sunk px-3 py-1.5 text-[0.78rem] font-semibold text-ink-soft"
         >
-          Navigation starten
+          {t.map.navigate}
         </a>
       </div>
     </div>
@@ -190,6 +186,7 @@ export function PlanMap({ origin, steps, mobility, returnHome, home }: Props) {
  *  - gemischt: Gesamtweg, aber als teils geschätzt gekennzeichnet
  */
 function wegText(
+  t: Dictionary,
   origin: Coordinates,
   steps: PlanStep[],
   mobility: Mobility,
@@ -197,16 +194,14 @@ function wegText(
 ): string {
   const summe = wegSumme({ steps, returnHome });
   if (summe.routing === 'all' && summe.meter > 0) {
-    return `${formatDistance(summe.meter)} Gesamtweg · ca. ${formatDuration(summe.minuten)} ${UNTERWEGS[mobility]}`;
+    return t.map.routed(distance(t, summe.meter), duration(t, summe.minuten), t.map.modes[mobility]);
   }
-  if (summe.routing === 'some') {
-    return `ca. ${formatDistance(summe.meter)} Gesamtweg · teils geschätzt`;
-  }
+  if (summe.routing === 'some') return t.map.partial(distance(t, summe.meter));
   const luftlinie = steps.reduce((sum, step, i) => {
     const previous = i === 0 ? origin : steps[i - 1].place.location;
     return sum + haversineMeters(previous, step.place.location);
   }, 0);
-  return `${formatDistance(luftlinie)} Luftlinie insgesamt`;
+  return t.map.airline(distance(t, luftlinie));
 }
 
 const TRAVEL_MODE: Record<Mobility, string> = {

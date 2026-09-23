@@ -27,7 +27,7 @@ export function BottomNav() {
   }
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 pointer-events-none">
+    <nav aria-label={t.nav.label} className="fixed inset-x-0 bottom-0 z-30 pointer-events-none">
       <div className="shell safe-bottom pointer-events-auto">
         <div className="mb-2 flex items-center justify-around rounded-3xl border border-line/80 bg-canvas-raised/85 px-2 py-1.5 shadow-card backdrop-blur-xl">
           {ITEMS.map(({ href, key, icon: Icon }) => {

@@ -1,9 +1,10 @@
 import { estimateTravelMinutes, haversineMeters } from '@/lib/geo';
 import { formatClock } from '@/lib/time';
-import type { Coordinates, Plan, PlanStep } from '@/types/domain';
+import type { Coordinates, Plan, PlanNote, PlanStep } from '@/types/domain';
 import { passesHardFilters } from './hardFilters';
 import { assemblePlan, homeLeg, replaceStep, roundToFive, weatherAt } from './planBuilder';
 import { replaceTourStop, tourStopFits } from './tourBuilder';
+import { note } from './texts';
 import type { PlanContext } from './types';
 
 /**
@@ -70,7 +71,7 @@ export function retimePlan(ctx: PlanContext, plan: Plan): RetimeResult | null {
     siblings: undefined,
   });
 
-  neuerPlan.notes.unshift({ kind: 'time', text: hinweis(ctx, ersetzt, weggelassen) });
+  neuerPlan.notes.unshift(hinweis(ctx, ersetzt, weggelassen));
   return { plan: neuerPlan, ersetzt, weggelassen };
 }
 
@@ -119,25 +120,10 @@ function passt(ctx: PlanContext, step: PlanStep, isTour: boolean): boolean {
   }).ok;
 }
 
-function hinweis(ctx: PlanContext, ersetzt: number, weggelassen: number): string {
-  const uhr = formatClock(ctx.start.toISOString(), 'de', ctx.tzOffsetMin);
-  const teile: string[] = [];
-  if (ersetzt > 0) {
-    teile.push(
-      ersetzt === 1
-        ? 'eine Station ist ausgetauscht, weil sie zur neuen Zeit nicht mehr passte'
-        : `${ersetzt} Stationen sind ausgetauscht, weil sie zur neuen Zeit nicht mehr passten`,
-    );
-  }
-  if (weggelassen > 0) {
-    // Gründe können Schließzeit, Dunkelheit, Wetter oder die Heimkehr sein –
-    // ohne passenden Ersatz fällt die Station weg.
-    teile.push(
-      weggelassen === 1
-        ? 'eine passte gar nicht mehr (geschlossen, dunkel oder zu spät) und ist weggefallen'
-        : `${weggelassen} passten gar nicht mehr (geschlossen, dunkel oder zu spät) und sind weggefallen`,
-    );
-  }
-  if (teile.length === 0) return `Auf ${uhr} Uhr verschoben – alle Stationen passen auch zur neuen Zeit.`;
-  return `Auf ${uhr} Uhr verschoben – ${teile.join(', ')}.`;
+function hinweis(ctx: PlanContext, ersetzt: number, weggelassen: number): PlanNote {
+  return note(ctx, 'time', 'retimed', {
+    time: formatClock(ctx.start.toISOString(), 'de', ctx.tzOffsetMin),
+    replaced: ersetzt,
+    dropped: weggelassen,
+  });
 }

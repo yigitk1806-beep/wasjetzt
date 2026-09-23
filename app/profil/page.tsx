@@ -12,8 +12,9 @@ import {
   updatePreferences,
   type StoredLocation,
 } from '@/lib/clientStore';
-import { CATEGORY_EMOJI, CATEGORY_LABEL } from '@/providers/activityProfiles';
+import { CATEGORY_EMOJI } from '@/providers/activityProfiles';
 import type { Category, UserPreferences } from '@/types/domain';
+import { locationLabel } from '@/lib/i18n/format';
 
 export default function ProfilePage() {
   const { t, locale, setLocale } = useLocale();
@@ -74,7 +75,7 @@ export default function ProfilePage() {
                   key={category}
                   className="rounded-2xl bg-mint-100 px-3.5 py-2 text-[0.88rem] font-medium text-mint-700"
                 >
-                  {CATEGORY_EMOJI[category]} {CATEGORY_LABEL[category]}
+                  {CATEGORY_EMOJI[category]} {t.categories[category]}
                 </span>
               ))}
             </div>
@@ -84,14 +85,14 @@ export default function ProfilePage() {
         <div className="space-y-2">
           <p className="text-[0.82rem] text-ink-muted">{t.profile.disliked}</p>
           <div className="flex flex-wrap gap-2">
-            {(Object.keys(CATEGORY_LABEL) as Category[]).map((category) => (
+            {(Object.keys(t.categories) as Category[]).map((category) => (
               <Chip
                 key={category}
                 emoji={CATEGORY_EMOJI[category]}
                 selected={(prefs?.dislikes[category] ?? 0) >= 0.5}
                 onClick={() => toggleDislike(category)}
               >
-                {CATEGORY_LABEL[category]}
+                {t.categories[category]}
               </Chip>
             ))}
           </div>
@@ -110,16 +111,9 @@ export default function ProfilePage() {
               onClick={() => setLocale(entry.code as Locale)}
             >
               {entry.label}
-              {!entry.complete ? (
-                <span className="ml-1 text-[0.7rem] opacity-60">bald</span>
-              ) : null}
             </Chip>
           ))}
         </div>
-        <p className="text-[0.76rem] text-ink-faint">
-          Französisch, Spanisch, Italienisch und Türkisch sind vorbereitet, aber noch nicht
-          übersetzt – sie zeigen vorerst Deutsch.
-        </p>
       </section>
 
       {/* Datenschutz */}
@@ -127,28 +121,29 @@ export default function ProfilePage() {
         <h2 className="text-[0.95rem] font-bold tracking-tight">{t.profile.privacy}</h2>
 
         <div className="space-y-2.5 rounded-3xl bg-canvas-raised p-4 shadow-card hairline">
-          <Row label="Gespeicherter Ort" value={location ? location.label : 'keiner'} />
           <Row
-            label="Standortquelle"
-            value={location?.fromDevice ? 'Gerätestandort' : location ? 'manuell gewählt' : '–'}
+            label={t.profile.savedPlace}
+            value={location ? (locationLabel(t, location.label) ?? t.profile.none) : t.profile.none}
           />
           <Row
-            label="Gemerkte Orte"
-            value={`${prefs?.recentPlaceIds.length ?? 0}`}
+            label={t.profile.locationSource}
+            value={
+              location?.fromDevice ? t.profile.sourceDevice : location ? t.profile.sourceManual : '–'
+            }
           />
+          <Row label={t.profile.rememberedPlaces} value={`${prefs?.recentPlaceIds.length ?? 0}`} />
           <Row
-            label="Preis-Empfindlichkeit"
+            label={t.profile.priceSensitivity}
             value={`${Math.round((prefs?.priceSensitivity ?? 0.5) * 100)} %`}
           />
           <Row
-            label="Entfernungs-Empfindlichkeit"
+            label={t.profile.distanceSensitivity}
             value={`${Math.round((prefs?.distanceSensitivity ?? 0.5) * 100)} %`}
           />
         </div>
 
         <p className="text-[0.8rem] leading-relaxed text-ink-muted">
-          {t.profile.storedLocally} Es gibt kein Konto, keinen Server-Abgleich und keine
-          Weitergabe an Dritte. Dein Standort wird nur für die aktuelle Suche verwendet.
+          {t.profile.privacyText}
         </p>
 
         <Button
@@ -167,7 +162,7 @@ export default function ProfilePage() {
       </section>
 
       <p className="pb-4 text-center text-[0.74rem] text-ink-faint">
-        WasJetzt · Mehr erleben. Weniger planen.
+        WasJetzt · {t.meta.tagline}
       </p>
     </main>
   );

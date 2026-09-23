@@ -1,5 +1,6 @@
 'use client';
 
+import { useLocale } from '@/components/LocaleProvider';
 import { useEffect, useMemo, useState } from 'react';
 import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
@@ -8,20 +9,15 @@ import { groupAction } from '@/lib/planClient';
 import type { Category, Plan, RsvpStatus } from '@/types/domain';
 
 const RSVP_EMOJI: Record<RsvpStatus, string> = { yes: '✅', maybe: '🤔', no: '❌' };
-const RSVP_LABEL: Record<RsvpStatus, string> = {
-  yes: 'Zugesagt',
-  maybe: 'Vielleicht',
-  no: 'Nicht dabei',
-};
 
-const VOTE_OPTIONS: Array<{ category: Category; emoji: string; label: string }> = [
-  { category: 'activity', emoji: '🎳', label: 'Aktivität' },
-  { category: 'gaming', emoji: '🎮', label: 'Gaming' },
-  { category: 'cinema', emoji: '🎬', label: 'Kino' },
-  { category: 'bar', emoji: '🍹', label: 'Bar' },
-  { category: 'food', emoji: '🍽️', label: 'Essen' },
-  { category: 'nature', emoji: '🌳', label: 'Draußen' },
-];
+const VOTE_OPTIONS = [
+  { category: 'activity', emoji: '🎳' },
+  { category: 'gaming', emoji: '🎮' },
+  { category: 'cinema', emoji: '🎬' },
+  { category: 'bar', emoji: '🍹' },
+  { category: 'food', emoji: '🍽️' },
+  { category: 'nature', emoji: '🌳' },
+] as const satisfies ReadonlyArray<{ category: Category; emoji: string }>;
 
 function storageKey(planId: string) {
   return `wasjetzt.participant.${planId}`;
@@ -37,6 +33,7 @@ type Props = {
  * also sobald jemand teilnimmt oder der Plan geteilt wurde.
  */
 export function GroupPanel({ plan, onPlanChange }: Props) {
+  const { t } = useLocale();
   const [myId, setMyId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [joining, setJoining] = useState(false);
@@ -132,10 +129,10 @@ export function GroupPanel({ plan, onPlanChange }: Props) {
   return (
     <section className="space-y-3 rounded-3xl bg-canvas-raised p-4 shadow-card hairline">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-[0.95rem] font-bold tracking-tight">Wer kommt mit?</h2>
+        <h2 className="text-[0.95rem] font-bold tracking-tight">{t.group.title}</h2>
         {hasGroup ? (
           <span className="text-[0.76rem] text-ink-faint">
-            {plan.participants.filter((p) => p.rsvp === 'yes').length} zugesagt
+            {t.group.confirmed(plan.participants.filter((p) => p.rsvp === 'yes').length)}
           </span>
         ) : null}
       </div>
@@ -150,18 +147,18 @@ export function GroupPanel({ plan, onPlanChange }: Props) {
               <span className="min-w-0 truncate font-medium">
                 {participant.name}
                 {participant.id === myId ? (
-                  <span className="text-ink-faint"> (du)</span>
+                  <span className="text-ink-faint"> {t.group.you}</span>
                 ) : null}
               </span>
               <span className="shrink-0 text-[0.82rem] text-ink-muted">
-                {RSVP_EMOJI[participant.rsvp]} {RSVP_LABEL[participant.rsvp]}
+                {RSVP_EMOJI[participant.rsvp]} {t.group.rsvp[participant.rsvp]}
               </span>
             </li>
           ))}
         </ul>
       ) : (
         <p className="text-[0.86rem] text-ink-muted">
-          Teil den Plan – wer ihn öffnet, kann hier zusagen.
+          {t.group.invite}
         </p>
       )}
 
@@ -175,7 +172,7 @@ export function GroupPanel({ plan, onPlanChange }: Props) {
               disabled={busy}
               onClick={() => void setRsvp(status)}
             >
-              {RSVP_LABEL[status]}
+              {t.group.rsvp[status]}
             </Chip>
           ))}
         </div>
@@ -190,18 +187,18 @@ export function GroupPanel({ plan, onPlanChange }: Props) {
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Dein Name"
+            placeholder={t.group.namePlaceholder}
             autoFocus
             enterKeyHint="done"
             className="min-w-0 flex-1 rounded-2xl bg-canvas-sunk px-4 py-2.5 text-[0.92rem] outline-none ring-brand-300 focus:ring-2"
           />
           <Button type="submit" size="md" loading={busy}>
-            Dabei
+            {t.group.join}
           </Button>
         </form>
       ) : (
         <Button variant="secondary" size="md" full onClick={() => setJoining(true)}>
-          Ich bin dabei
+          {t.group.imIn}
         </Button>
       )}
 
@@ -219,7 +216,7 @@ export function GroupPanel({ plan, onPlanChange }: Props) {
             disabled={busy || plan.steps.length === 0}
             className="tap text-[0.86rem] font-semibold text-brand-600 disabled:opacity-50"
           >
-            📍 Treffpunkt festlegen
+            📍 {t.group.setMeeting}
           </button>
         )}
       </div>
@@ -227,7 +224,7 @@ export function GroupPanel({ plan, onPlanChange }: Props) {
       {/* Voting – erst sinnvoll, wenn mehrere dabei sind. */}
       {plan.participants.length >= 2 && me ? (
         <div className="border-t border-line pt-3">
-          <h3 className="mb-2 text-[0.88rem] font-semibold">Worauf habt ihr Lust?</h3>
+          <h3 className="mb-2 text-[0.88rem] font-semibold">{t.group.vote}</h3>
           <div className="flex flex-wrap gap-2">
             {VOTE_OPTIONS.map((option) => {
               const count = voteCounts.get(option.category) ?? 0;
@@ -239,7 +236,7 @@ export function GroupPanel({ plan, onPlanChange }: Props) {
                   disabled={busy}
                   onClick={() => void vote(option.category)}
                 >
-                  {option.label}
+                  {t.group.voteOptions[option.category]}
                   {count > 0 ? <span className="ml-1 opacity-70">{count}</span> : null}
                 </Chip>
               );

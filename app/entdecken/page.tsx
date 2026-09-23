@@ -9,13 +9,14 @@ import { MapPin } from '@/components/ui/icons';
 import {
   TimeField,
   clockFromMin,
-  jetztText,
   minutesOf,
   nextQuarter,
-  startLabel,
+  startDay,
   startMinutes,
   useNowClock,
 } from '@/components/ui/TimeField';
+import { useLocale } from '@/components/LocaleProvider';
+import { DEVICE_LOCATION_LABEL, errorText } from '@/lib/i18n/format';
 import { useLocation } from '@/hooks/useLocation';
 import { requestPlanStreamed, type PlanPhase } from '@/lib/planClient';
 import type { SightTheme } from '@/types/domain';
@@ -28,10 +29,8 @@ import type { SightTheme } from '@/types/domain';
  */
 
 type Auswahl = {
-  key: string;
+  key: 'wahrzeichen' | 'kultur' | 'parks' | 'fotos' | 'ueberraschung';
   emoji: string;
-  title: string;
-  hint: string;
   interests: SightTheme[];
   tint: string;
 };
@@ -40,53 +39,39 @@ const AUSWAHL: Auswahl[] = [
   {
     key: 'wahrzeichen',
     emoji: '🏛️',
-    title: 'Wahrzeichen',
-    hint: 'Die Orte, für die man herkommt',
     interests: ['classic'],
     tint: 'from-brand-100 to-sun-100',
   },
   {
     key: 'kultur',
     emoji: '🎨',
-    title: 'Kunst & Kultur',
-    hint: 'Museen, Galerien und Geschichte',
     interests: ['museum', 'history'],
     tint: 'from-plum-100 to-sky-100',
   },
   {
     key: 'parks',
     emoji: '🌳',
-    title: 'Parks & besondere Orte',
-    hint: 'Grün, Aussicht und Ruhe',
     interests: ['park'],
     tint: 'from-mint-100 to-sky-100',
   },
   {
     key: 'fotos',
     emoji: '📸',
-    title: 'Fotospots',
-    hint: 'Die schönsten Motive der Umgebung',
     interests: ['photo'],
     tint: 'from-sky-100 to-plum-100',
   },
   {
     key: 'ueberraschung',
     emoji: '✨',
-    title: 'Überrasch mich',
-    hint: 'Eine bunte Mischung, jedes Mal anders',
     interests: [],
     tint: 'from-sun-100 to-brand-100',
   },
 ];
 
-const DAUER: Array<{ minutes: number; label: string }> = [
-  { minutes: 120, label: '1–2 Std.' },
-  { minutes: 210, label: '3–4 Std.' },
-  { minutes: 300, label: 'Halber Tag' },
-  { minutes: 480, label: 'Ganzer Tag' },
-];
+const DAUER = [{ minutes: 120 }, { minutes: 210 }, { minutes: 300 }, { minutes: 480 }] as const;
 
 export default function EntdeckenPage() {
+  const { t } = useLocale();
   const router = useRouter();
   const { location, setManual, requestDevice } = useLocation();
   const [minutes, setMinutes] = useState(210);
@@ -173,10 +158,10 @@ export default function EntdeckenPage() {
     }
     setBusy(null);
     setPhase(null);
-    setError(response.message ?? response.error ?? 'Hier finde ich gerade keine Tour.');
+    setError(errorText(t, response));
   }
 
-  const ort = location?.label && location.label !== 'Dein Standort' ? location.label : null;
+  const ort = location?.label && location.label !== DEVICE_LOCATION_LABEL ? location.label : null;
 
   return (
     <>
@@ -185,7 +170,7 @@ export default function EntdeckenPage() {
           type="button"
           onClick={() => router.push('/')}
           className="tap -ml-2 grid h-10 w-10 place-items-center rounded-full text-ink-soft"
-          aria-label="Zurück"
+          aria-label={t.common.back}
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path
@@ -197,7 +182,7 @@ export default function EntdeckenPage() {
             />
           </svg>
         </button>
-        <span className="text-[0.95rem] font-semibold text-ink-soft">Sehenswürdigkeiten</span>
+        <span className="text-[0.95rem] font-semibold text-ink-soft">{t.discover.title}</span>
       </header>
 
       <main className="shell space-y-6 pb-16 pt-5">
@@ -208,7 +193,7 @@ export default function EntdeckenPage() {
           className="space-y-2"
         >
           <h1 className="text-balance text-[2.1rem] font-bold leading-[1.08] tracking-[-0.03em]">
-            Was möchtest du sehen?
+            {t.discover.question}
           </h1>
           <button
             type="button"
@@ -216,15 +201,15 @@ export default function EntdeckenPage() {
             className="tap -ml-1 inline-flex items-center gap-1.5 rounded-full px-1 py-1 text-[0.88rem] text-ink-muted"
           >
             <MapPin size={15} className="text-brand-500" />
-            {location ? (ort ? `Rund um ${ort}` : 'Rund um deinen Standort') : 'Ort wählen'}
-            <span className="font-semibold text-brand-600">· ändern</span>
+            {location ? (ort ? t.discover.around(ort) : t.discover.aroundYou) : t.discover.chooseLocation}
+            <span className="font-semibold text-brand-600">{t.discover.change}</span>
           </button>
         </motion.div>
 
         {/* Dauer: vorausgewählt, deshalb kein eigener Schritt. */}
         <div
           role="radiogroup"
-          aria-label="Wie viel Zeit habt ihr?"
+          aria-label={t.discover.durationAria}
           className="grid grid-cols-4 gap-1 rounded-2xl bg-canvas-sunk p-1"
         >
           {DAUER.map((option) => {
@@ -244,7 +229,7 @@ export default function EntdeckenPage() {
                   aktiv ? 'bg-canvas-raised text-ink shadow-card' : 'text-ink-muted',
                 ].join(' ')}
               >
-                {option.label}
+                {t.discover.durations[option.minutes]}
               </button>
             );
           })}
@@ -256,24 +241,25 @@ export default function EntdeckenPage() {
           <TimeField
             compact
             icon="🕐"
-            label="Wann starten?"
+            label={t.time.startLabel}
             value={startAt}
-            emptyText={jetztText(jetzt, 'Start jetzt')}
-            valueText={(v) => `Start ${startLabel(v).replace(' · ', ' ')}`}
-            actionText="Ändern"
-            resetText="Jetzt"
+            emptyText={t.time.compactStartNow(jetzt)}
+            valueText={(v) => t.time.compactStart(startDay(v), v)}
+            actionText={t.time.changeStart}
+            resetText={t.time.now}
             pickerDefault={nextQuarter(jetzt)}
             onChange={setStartAt}
           />
           <TimeField
             compact
             icon="🏠"
-            label="Zuhause bis"
+            label={t.time.homeLabel}
             value={homeBy}
-            emptyText="Zuhause bis …"
-            valueText={(v) => `Zuhause ${v}`}
-            actionText="Festlegen"
-            resetText="Keine"
+            emptyText={t.time.compactHomeNone}
+            valueText={(v) => t.time.compactHome(v)}
+            actionText={t.time.homeSet}
+            changeText={t.time.change}
+            resetText={t.time.homeClear}
             pickerDefault={clockFromMin(Math.round(((startMin ?? 720) + minutes + 30) / 60) * 60)}
             commitOnBlur
             onChange={setHomeBy}
@@ -300,9 +286,11 @@ export default function EntdeckenPage() {
                 {auswahl.emoji}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[1.06rem] font-bold tracking-tight">{auswahl.title}</span>
+                <span className="block text-[1.06rem] font-bold tracking-tight">
+                  {t.discover.options[auswahl.key].title}
+                </span>
                 <span className="mt-0.5 block text-[0.84rem] leading-snug text-ink-muted">
-                  {auswahl.hint}
+                  {t.discover.options[auswahl.key].hint}
                 </span>
               </span>
               <svg
@@ -336,9 +324,7 @@ export default function EntdeckenPage() {
         ) : null}
 
         <p className="px-1 text-[0.78rem] leading-relaxed text-ink-faint">
-          Die Tour beginnt {startAt ? `um ${startAt} Uhr` : 'jetzt'} an deinem Standort und läuft zu
-          Fuß. Öffnungszeiten, Wetter und Tageslicht sind eingerechnet
-          {homeBy ? `, der Rückweg bis ${homeBy} Uhr auch` : ''}.
+          {t.discover.footer(startAt, homeBy)}
         </p>
       </main>
 

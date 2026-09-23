@@ -238,6 +238,8 @@ export type PlanStep = {
   openingHoursKnown: boolean;
   /** Kurzer Satz, warum dieser Schritt gewählt wurde. */
   reason: string;
+  /** Begründung als Schlüssel ins Wörterbuch. */
+  reasonKey?: string;
 };
 
 export type PlanVariantKey = 'balanced' | 'romantic' | 'action' | 'cheap';
@@ -247,6 +249,9 @@ export type Plan = {
   /** Kurzer, teilbarer Code für den Link. */
   shareCode: string;
   title: string;
+  /** Titel als Schlüssel – so erscheint er in der Sprache des Betrachters. */
+  titleKey?: 'plan' | 'tour';
+  titleParams?: Record<string, string>;
   /** Ein Satz, der den Plan beschreibt. */
   summary: string;
   variant: PlanVariantKey;
@@ -306,7 +311,11 @@ export type PlanCost = {
 
 export type PlanNote = {
   kind: 'info' | 'weather' | 'budget' | 'time' | 'availability';
+  /** Text in der Sprache der Anfrage – Rückfall für ältere Pläne. */
   text: string;
+  /** Schlüssel ins Wörterbuch; die Oberfläche übersetzt damit in die Sprache des Betrachters. */
+  key?: string;
+  params?: Record<string, string | number>;
 };
 
 export type MeetingPoint = {

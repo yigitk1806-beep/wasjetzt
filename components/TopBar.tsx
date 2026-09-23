@@ -1,6 +1,8 @@
 'use client';
 
 import { weatherEmoji } from '@/engine/weatherRules';
+import { useLocale } from '@/components/LocaleProvider';
+import { locationLabel } from '@/lib/i18n/format';
 import type { WeatherSlice } from '@/types/domain';
 
 type Props = {
@@ -11,7 +13,8 @@ type Props = {
 };
 
 /** Kopfzeile: Name, Ort, Wetter. Mehr braucht die Startseite oben nicht. */
-export function TopBar({ locationLabel, locating, weather, onLocationClick }: Props) {
+export function TopBar({ locationLabel: ort, locating, weather, onLocationClick }: Props) {
+  const { t } = useLocale();
   return (
     <header className="shell safe-top flex items-center justify-between gap-3 pt-3">
       <span className="text-[1.05rem] font-bold tracking-tight">
@@ -26,7 +29,7 @@ export function TopBar({ locationLabel, locating, weather, onLocationClick }: Pr
         >
           <span aria-hidden>📍</span>
           <span className="max-w-[9rem] truncate">
-            {locating ? 'Standort …' : (locationLabel ?? 'Ort wählen')}
+            {locating ? t.location.locating : (locationLabel(t, ort) ?? t.location.choose)}
           </span>
         </button>
 

@@ -16,6 +16,7 @@ import { useLocation } from '@/hooks/useLocation';
 import { useWeather } from '@/hooks/useWeather';
 import { loadRecentPlans, suggestRoutine, type RecentPlan } from '@/lib/clientStore';
 import { requestPlanStreamed, type PlanPhase, type PlanRequestInput } from '@/lib/planClient';
+import { errorText, recentTitle, recentSummary } from '@/lib/i18n/format';
 import type { Category } from '@/types/domain';
 
 export default function HomePage() {
@@ -29,7 +30,7 @@ export default function HomePage() {
   const [phase, setPhase] = useState<PlanPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recent, setRecent] = useState<RecentPlan[]>([]);
-  const [routineHint, setRoutineHint] = useState<string | null>(null);
+  const [routine, setRoutine] = useState<{ weekday: number; mood: string } | null>(null);
 
   // Ortsdaten schon beim Lesen der Startseite laden, damit "Jetzt los"
   // nicht auf das Netz warten muss.
@@ -44,13 +45,8 @@ export default function HomePage() {
 
   useEffect(() => {
     setRecent(loadRecentPlans().slice(0, 1));
-    const routine = suggestRoutine(new Date().getDay());
-    if (routine) {
-      const moodLabel = routine.moods[0];
-      setRoutineHint(
-        moodLabel ? `Wie sonst ${WEEKDAY[new Date().getDay()]}: ${MOOD_LABEL[moodLabel]}?` : null,
-      );
-    }
+    const vorschlag = suggestRoutine(new Date().getDay());
+    if (vorschlag?.moods[0]) setRoutine({ weekday: new Date().getDay(), mood: vorschlag.moods[0] });
   }, []);
 
   const go = useCallback(
@@ -78,9 +74,9 @@ export default function HomePage() {
 
       setBusy(false);
       setPhase(null);
-      setError(response.message ?? response.error ?? t.plan.empty);
+      setError(errorText(t, response));
     },
-    [location, router, t.plan.empty],
+    [location, router, t],
   );
 
   const disabled = !location;
@@ -157,13 +153,17 @@ export default function HomePage() {
           </motion.p>
         ) : null}
 
-        {routineHint ? (
+        {routine ? (
           <button
             type="button"
             onClick={() => void go({})}
             className="tap w-full rounded-2xl bg-canvas-sunk px-4 py-3 text-left text-[0.86rem] text-ink-soft"
           >
-            💡 {routineHint}
+            💡{' '}
+            {t.home.routine(
+              routine.weekday,
+              t.home.routineMood[routine.mood as keyof typeof t.home.routineMood] ?? routine.mood,
+            )}
           </button>
         ) : null}
 
@@ -195,9 +195,11 @@ export default function HomePage() {
                   {plan.emojis.slice(0, 3).join(' ')}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[0.95rem] font-semibold">{plan.title}</span>
+                  <span className="block truncate text-[0.95rem] font-semibold">
+                    {recentTitle(t, plan)}
+                  </span>
                   <span className="block truncate text-[0.8rem] text-ink-muted">
-                    {plan.summary}
+                    {recentSummary(t, plan)}
                   </span>
                 </span>
               </Link>
@@ -216,16 +218,3 @@ export default function HomePage() {
     </>
   );
 }
-
-const WEEKDAY = ['sonntags', 'montags', 'dienstags', 'mittwochs', 'donnerstags', 'freitags', 'samstags'];
-
-const MOOD_LABEL: Record<string, string> = {
-  date: 'etwas Romantisches',
-  action: 'etwas mit Action',
-  chill: 'etwas Entspanntes',
-  party: 'etwas zum Feiern',
-  food: 'etwas Essen',
-  nature: 'raus in die Natur',
-  gaming: 'etwas zum Zocken',
-  new: 'etwas Neues',
-};

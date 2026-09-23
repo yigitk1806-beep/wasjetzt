@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { formatDistance } from '@/lib/geo';
+import { useLocale } from '@/components/LocaleProvider';
+import { distance, kind } from '@/lib/i18n/format';
 import type { Coordinates, Place } from '@/types/domain';
 
 type Deal = { place: Place; distanceMeters: number };
@@ -17,6 +18,7 @@ type Props = {
  * wenn es tatsächlich welche gibt; sonst bleibt die Startseite leer und ruhig.
  */
 export function DealsStrip({ coords, onPick }: Props) {
+  const { t } = useLocale();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [isMock, setIsMock] = useState(false);
 
@@ -43,8 +45,8 @@ export function DealsStrip({ coords, onPick }: Props) {
   return (
     <section className="space-y-2.5">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-[0.95rem] font-bold tracking-tight">⚡ Jetzt günstig</h2>
-        {isMock ? <span className="text-[0.7rem] text-ink-faint">Demo</span> : null}
+        <h2 className="text-[0.95rem] font-bold tracking-tight">⚡ {t.home.deals}</h2>
+        {isMock ? <span className="text-[0.7rem] text-ink-faint">{t.common.demo}</span> : null}
       </div>
 
       <div className="-mx-[1.15rem] edge-fade">
@@ -66,13 +68,13 @@ export function DealsStrip({ coords, onPick }: Props) {
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-[0.92rem] font-semibold">
-                  {deal.place.kind}
+                  {kind(t, deal.place.kind)}
                 </span>
                 <span className="block truncate text-[0.78rem] text-mint-700">
-                  {deal.place.deal?.label}
+                  {deal.place.deal ? t.home.dealDiscount(deal.place.deal.discountPercent) : null}
                 </span>
                 <span className="block text-[0.74rem] text-ink-faint">
-                  {formatDistance(deal.distanceMeters)}
+                  {distance(t, deal.distanceMeters)}
                 </span>
               </span>
             </motion.button>

@@ -1,11 +1,12 @@
-import type { LanguageProvider, ParsedIntent } from '@/providers/types';
+import { dictionaryFor } from '@/lib/i18n';
+import type { LanguageProvider, ParsedIntent, UnderstoodToken } from '@/providers/types';
 import type { BudgetPreset, Category, Mobility, Mood, Party } from '@/types/domain';
 
 type Rule = {
   test: RegExp;
   apply: (intent: Mutable, match: RegExpMatchArray) => void;
-  /** Kurzer Text für "Das habe ich verstanden". */
-  label: string | ((match: RegExpMatchArray) => string);
+  /** "Das habe ich verstanden" – als Schlüssel, die Oberfläche übersetzt. */
+  label: UnderstoodToken | ((match: RegExpMatchArray) => UnderstoodToken);
 };
 
 type Mutable = ParsedIntent & { moods: Mood[] };
@@ -36,7 +37,7 @@ const RULES: Rule[] = [
       i.party = 'solo';
       i.groupSize = 1;
     },
-    label: 'alleine unterwegs',
+    label: { key: 'solo' },
   },
   {
     test: /\b(freundin|freund|partner|partnerin|date|zu zweit|meiner frau|meinem mann|girlfriend|boyfriend)\b/i,
@@ -44,7 +45,7 @@ const RULES: Rule[] = [
       i.party = 'partner';
       i.groupSize ??= 2;
     },
-    label: 'zu zweit',
+    label: { key: 'partner' },
   },
   {
     test: /\b(familie|kinder|mit den kids|family|kids)\b/i,
@@ -52,7 +53,7 @@ const RULES: Rule[] = [
       i.party = 'family';
       i.groupSize ??= 4;
     },
-    label: 'mit Familie',
+    label: { key: 'family' },
   },
   {
     test: /\b(freunde|kumpel|jungs|mädels|maedels|clique|friends)\b/i,
@@ -60,7 +61,7 @@ const RULES: Rule[] = [
       i.party = 'friends';
       i.groupSize ??= 4;
     },
-    label: 'mit Freunden',
+    label: { key: 'friends' },
   },
   {
     test: /\b(?:wir sind|zu)\s+(\d{1,2}|zwei|drei|vier|fünf|fuenf|sechs|sieben|acht|two|three|four|five|six)\b/i,
@@ -73,7 +74,7 @@ const RULES: Rule[] = [
         else i.party ??= n === 2 ? 'partner' : 'friends';
       }
     },
-    label: (m) => `${toNumber(m[1]) ?? '?'} Personen`,
+    label: (m) => ({ key: 'people', args: [toNumber(m[1]) ?? 0] }),
   },
   {
     test: /\b(\d{1,2}|zwei|drei|vier|fünf|fuenf|sechs)\s+(freunde|leute|personen|people|friends)\b/i,
@@ -85,7 +86,7 @@ const RULES: Rule[] = [
         else i.party ??= n === 2 ? 'partner' : 'friends';
       }
     },
-    label: (m) => `${toNumber(m[1]) ?? '?'} Personen`,
+    label: (m) => ({ key: 'people', args: [toNumber(m[1]) ?? 0] }),
   },
 
   // ---- Budget ---------------------------------------------------------
@@ -95,7 +96,7 @@ const RULES: Rule[] = [
       i.budget = 'free';
       i.budgetPerPerson = 0;
     },
-    label: 'kostenlos',
+    label: { key: 'free' },
   },
   {
     test: /(\d{1,4})\s*(?:€|eur|euro)/i,
@@ -105,14 +106,14 @@ const RULES: Rule[] = [
       i.budgetPerPerson = amount;
       i.budget = amount <= 1 ? 'free' : amount <= 25 ? 'low' : amount <= 60 ? 'medium' : 'high';
     },
-    label: (m) => `Budget ${m[1]} €`,
+    label: (m) => ({ key: 'budget', args: [Number(m[1])] }),
   },
   {
     test: /\b(günstig|guenstig|billig|wenig geld|sparen|cheap|low budget)\b/i,
     apply: (i) => {
       i.budget ??= 'low';
     },
-    label: 'günstig',
+    label: { key: 'cheap' },
   },
   {
     test: /\b(egal was es kostet|geld egal|budget egal|preis egal)\b/i,
@@ -120,7 +121,7 @@ const RULES: Rule[] = [
       i.budget = 'any';
       i.budgetPerPerson = undefined;
     },
-    label: 'Budget egal',
+    label: { key: 'budgetAny' },
   },
 
   // ---- Zeit -----------------------------------------------------------
@@ -130,7 +131,7 @@ const RULES: Rule[] = [
       const hi = Number(m[2]);
       if (Number.isFinite(hi)) i.availableMinutes = hi * 60;
     },
-    label: (m) => `${m[1]}–${m[2]} Stunden`,
+    label: (m) => ({ key: 'hoursRange', args: [Number(m[1]), Number(m[2])] }),
   },
   {
     test: /\b(\d{1,2}|eine|zwei|drei|vier|fünf|fuenf|sechs)\s*(?:stunden|stunde|std|h\b|hours|hour)/i,
@@ -138,14 +139,14 @@ const RULES: Rule[] = [
       const n = toNumber(m[1]);
       if (n) i.availableMinutes = Math.round(n * 60);
     },
-    label: (m) => `${toNumber(m[1]) ?? '?'} Stunden Zeit`,
+    label: (m) => ({ key: 'hours', args: [toNumber(m[1]) ?? 0] }),
   },
   {
     test: /\b(ganzer tag|den ganzen tag|whole day|all day)\b/i,
     apply: (i) => {
       i.availableMinutes = 480;
     },
-    label: 'ganzer Tag',
+    label: { key: 'wholeDay' },
   },
   {
     test: /\b(?:bis|um)\s*(\d{1,2})(?::(\d{2}))?\s*(?:uhr)?\s*(?:wieder\s*)?(?:zu\s*hause|zuhause|daheim|home|back)\b/i,
@@ -154,7 +155,7 @@ const RULES: Rule[] = [
       const min = Number(m[2] ?? 0);
       if (Number.isFinite(h)) i.homeByMinutes = h * 60 + (Number.isFinite(min) ? min : 0);
     },
-    label: (m) => `zuhause bis ${m[1]}:${m[2] ?? '00'} Uhr`,
+    label: (m) => ({ key: 'homeBy', args: [`${m[1].padStart(2, '0')}:${m[2] ?? '00'}`] }),
   },
   {
     // "ab 15 Uhr", "um 14:30 los", "starten um 18 Uhr" – aber nicht "um 22 Uhr zuhause".
@@ -164,7 +165,7 @@ const RULES: Rule[] = [
       const min = Number(m[2] ?? 0);
       if (Number.isFinite(h) && h <= 23) i.startMinutes = h * 60 + (Number.isFinite(min) ? min : 0);
     },
-    label: (m) => `Start um ${m[1]}:${m[2] ?? '00'} Uhr`,
+    label: (m) => ({ key: 'startAt', args: [`${m[1].padStart(2, '0')}:${m[2] ?? '00'}`] }),
   },
   {
     test: /\b(?:nur|hab(?:e)?|haben)\s*(?:noch\s*)?(\d{1,2})\s*(?:stunden|std|h)\b/i,
@@ -172,14 +173,14 @@ const RULES: Rule[] = [
       const n = toNumber(m[1]);
       if (n) i.availableMinutes = n * 60;
     },
-    label: (m) => `${m[1]} Stunden Zeit`,
+    label: (m) => ({ key: 'hours', args: [Number(m[1])] }),
   },
   {
     test: /\b(kurz|schnell|nicht lange|quick)\b/i,
     apply: (i) => {
       i.availableMinutes ??= 120;
     },
-    label: 'eher kurz',
+    label: { key: 'short' },
   },
 
   // ---- Stimmung -------------------------------------------------------
@@ -189,22 +190,22 @@ const RULES: Rule[] = [
       addMood(i, 'date');
       i.party ??= 'partner';
     },
-    label: 'romantisch',
+    label: { key: 'romantic' },
   },
   {
     test: /\b(action|adrenalin|sportlich|aktiv|bewegen|krass|verrückt|verrueckt|crazy|wild)\b/i,
     apply: (i) => addMood(i, 'action'),
-    label: 'Action',
+    label: { key: 'action' },
   },
   {
     test: /\b(entspann|chill|ruhig|gemütlich|gemuetlich|relax|locker)\w*/i,
     apply: (i) => addMood(i, 'chill'),
-    label: 'entspannt',
+    label: { key: 'chill' },
   },
   {
     test: /\b(party|feiern|tanzen|club|drinks|cocktails)\b/i,
     apply: (i) => addMood(i, 'party'),
-    label: 'Party',
+    label: { key: 'party' },
   },
   {
     test: /\b(essen|hunger|restaurant|dinner|lecker|food|abendessen)\b/i,
@@ -212,12 +213,12 @@ const RULES: Rule[] = [
       addMood(i, 'food');
       i.focusCategory ??= 'food';
     },
-    label: 'Essen',
+    label: { key: 'food' },
   },
   {
     test: /\b(natur|draußen|draussen|grün|gruen|frische luft|spazier|wald|see|park)\w*/i,
     apply: (i) => addMood(i, 'nature'),
-    label: 'Natur',
+    label: { key: 'nature' },
   },
   {
     test: /\b(gaming|zocken|konsole|vr|arcade)\b/i,
@@ -225,7 +226,7 @@ const RULES: Rule[] = [
       addMood(i, 'gaming');
       i.focusCategory ??= 'gaming';
     },
-    label: 'Gaming',
+    label: { key: 'gaming' },
   },
   {
     test: /\b(neu|noch nie|was anderes|abwechslung|something new|mal was)\b/i,
@@ -233,28 +234,28 @@ const RULES: Rule[] = [
       addMood(i, 'new');
       i.preferNovelty = true;
     },
-    label: 'etwas Neues',
+    label: { key: 'new' },
   },
   {
     test: /\b(kino|film|movie|cinema)\b/i,
     apply: (i) => {
       i.focusCategory = 'cinema';
     },
-    label: 'Kino',
+    label: { key: 'cinema' },
   },
   {
     test: /\b(café|cafe|kaffee|coffee|kuchen)\b/i,
     apply: (i) => {
       i.focusCategory ??= 'cafe';
     },
-    label: 'Café',
+    label: { key: 'cafe' },
   },
   {
     test: /\b(museum|ausstellung|kultur|theater)\b/i,
     apply: (i) => {
       i.focusCategory ??= 'culture';
     },
-    label: 'Kultur',
+    label: { key: 'culture' },
   },
 
   // ---- Wetter / Ort ---------------------------------------------------
@@ -263,14 +264,14 @@ const RULES: Rule[] = [
     apply: (i) => {
       i.avoidOutdoor = true;
     },
-    label: 'lieber drinnen',
+    label: { key: 'indoor' },
   },
   {
     test: /\b(nicht weit|in der nähe|in der naehe|um die ecke|nah|close by|nearby|keine lust zu fahren)\b/i,
     apply: (i) => {
       i.maxDistanceMeters = 2500;
     },
-    label: 'ganz in der Nähe',
+    label: { key: 'near' },
   },
 
   // ---- Mobilität ------------------------------------------------------
@@ -279,28 +280,28 @@ const RULES: Rule[] = [
     apply: (i) => {
       i.mobility = 'walk';
     },
-    label: 'zu Fuß',
+    label: { key: 'walk' },
   },
   {
     test: /\b(fahrrad|rad|bike|velo)\b/i,
     apply: (i) => {
       i.mobility = 'bike';
     },
-    label: 'mit dem Rad',
+    label: { key: 'bike' },
   },
   {
     test: /\b(auto|wagen|car|fahren wir)\b/i,
     apply: (i) => {
       i.mobility = 'car';
     },
-    label: 'mit dem Auto',
+    label: { key: 'car' },
   },
   {
     test: /\b(bahn|öpnv|oepnv|bus|u-?bahn|s-?bahn|transit|public transport)\b/i,
     apply: (i) => {
       i.mobility = 'transit';
     },
-    label: 'mit Bus & Bahn',
+    label: { key: 'transit' },
   },
 ];
 
@@ -313,21 +314,33 @@ const RULES: Rule[] = [
 export class RuleBasedLanguageProvider implements LanguageProvider {
   readonly id = 'rules';
 
-  async parse(text: string, _locale = 'de'): Promise<ParsedIntent> {
-    const intent: Mutable = { moods: [], understood: [], confidence: 0 };
+  async parse(text: string, locale = 'de'): Promise<ParsedIntent> {
+    const intent: Mutable = { moods: [], understood: [], understoodTokens: [], confidence: 0 };
     if (!text.trim()) return intent;
 
     for (const rule of RULES) {
       const match = text.match(rule.test);
       if (!match) continue;
       rule.apply(intent, match);
-      const label = typeof rule.label === 'function' ? rule.label(match) : rule.label;
-      if (!intent.understood.includes(label)) intent.understood.push(label);
+      const token = typeof rule.label === 'function' ? rule.label(match) : rule.label;
+      const verstanden = understoodText(locale, token);
+      if (!intent.understood.includes(verstanden)) {
+        intent.understood.push(verstanden);
+        intent.understoodTokens!.push(token);
+      }
     }
 
     intent.confidence = Math.min(1, intent.understood.length / 4);
     return intent;
   }
+}
+
+/** Ein verstandener Punkt als Text – in der gewünschten Sprache. */
+export function understoodText(locale: string, token: UnderstoodToken): string {
+  const eintrag = dictionaryFor(locale).understood[token.key] as
+    | string
+    | ((...args: Array<string | number>) => string);
+  return typeof eintrag === 'function' ? eintrag(...(token.args ?? [])) : eintrag;
 }
 
 export type { Party, Mood, Mobility, BudgetPreset, Category };

@@ -21,12 +21,15 @@ import { FeedbackSheet } from './FeedbackSheet';
 import { PlanHeader } from './PlanHeader';
 import { TimeSheet } from './TimeSheet';
 import { recordPlanStarted, recordRejection } from '@/lib/clientStore';
+import { useLocale } from '@/components/LocaleProvider';
+import { errorText, noteText } from '@/lib/i18n/format';
 import { replacePlanStep } from '@/lib/planClient';
 import type { Plan, PlanStep } from '@/types/domain';
 
 type Props = { initialPlan: Plan };
 
 export function PlanView({ initialPlan }: Props) {
+  const { t } = useLocale();
   const router = useRouter();
   const [plan, setPlan] = useState(initialPlan);
   const [replacing, setReplacing] = useState<PlanStep | null>(null);
@@ -74,9 +77,9 @@ export function PlanView({ initialPlan }: Props) {
         setReplacing(null);
         return;
       }
-      setReplaceError(result.message ?? result.error ?? 'Keine Alternative gefunden.');
+      setReplaceError(errorText(t, result, t.plan.noAlternative));
     },
-    [plan.id, replacing],
+    [plan.id, replacing, t],
   );
 
   const adjustForWeather = useCallback(async () => {
@@ -105,7 +108,7 @@ export function PlanView({ initialPlan }: Props) {
         <Link
           href="/"
           className="tap -ml-2 grid h-10 w-10 place-items-center rounded-full text-ink-soft"
-          aria-label="Zurück"
+          aria-label={t.common.back}
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path
@@ -123,7 +126,7 @@ export function PlanView({ initialPlan }: Props) {
           onClick={() => setShareOpen(true)}
           className="tap -mr-2 flex h-10 items-center gap-1.5 rounded-full px-3 text-[0.86rem] font-semibold text-ink-soft"
         >
-          <span aria-hidden>↗</span> Teilen
+          <span aria-hidden>↗</span> {t.common.share}
         </button>
       </header>
 
@@ -143,16 +146,14 @@ export function PlanView({ initialPlan }: Props) {
                   ⚠️
                 </span>
                 <div className="flex-1">
-                  <p className="text-[0.9rem] font-semibold">Das Wetter hat sich geändert.</p>
-                  <p className="mt-0.5 text-[0.84rem] text-ink-soft">
-                    Der geplante Outdoor-Teil könnte nass werden.
-                  </p>
+                  <p className="text-[0.9rem] font-semibold">{t.plan.weatherChanged}</p>
+                  <p className="mt-0.5 text-[0.84rem] text-ink-soft">{t.plan.weatherChangedHint}</p>
                   <div className="mt-2.5 flex gap-2">
                     <Button size="sm" loading={adjusting} onClick={() => void adjustForWeather()}>
-                      Plan anpassen
+                      {t.plan.adjust}
                     </Button>
                     <Button size="sm" variant="quiet" onClick={() => setWeatherAlert(null)}>
-                      Passt schon
+                      {t.plan.fine}
                     </Button>
                   </div>
                 </div>
@@ -191,7 +192,7 @@ export function PlanView({ initialPlan }: Props) {
                 className="flex gap-2 rounded-2xl bg-canvas-sunk px-3.5 py-2.5 text-[0.84rem] text-ink-soft"
               >
                 <span aria-hidden>{NOTE_EMOJI[note.kind]}</span>
-                <span>{note.text}</span>
+                <span>{noteText(t, note)}</span>
               </li>
             ))}
           </ul>
@@ -200,7 +201,7 @@ export function PlanView({ initialPlan }: Props) {
         {/* Andere Richtung – nur, wenn es echte Alternativen gibt. */}
         {plan.siblings && plan.siblings.length > 1 ? (
           <section className="space-y-2.5">
-            <h2 className="text-[0.95rem] font-bold tracking-tight">Andere Richtung</h2>
+            <h2 className="text-[0.95rem] font-bold tracking-tight">{t.plan.variants}</h2>
             <div className="-mx-[1.15rem] edge-fade">
               <div className="scroll-x px-[1.15rem]">
                 {plan.siblings.map((sibling) => (
@@ -216,7 +217,7 @@ export function PlanView({ initialPlan }: Props) {
                         : 'bg-canvas-raised text-ink-soft hairline shadow-card',
                     ].join(' ')}
                   >
-                    {sibling.emoji} {sibling.title}
+                    {sibling.emoji} {t.plan.variantNames[sibling.variant] ?? sibling.title}
                   </button>
                 ))}
               </div>
@@ -228,8 +229,7 @@ export function PlanView({ initialPlan }: Props) {
 
         {plan.containsMockData ? (
           <p className="rounded-2xl bg-canvas-sunk px-3.5 py-3 text-[0.76rem] leading-relaxed text-ink-faint">
-            Demo-Daten: Orte, Preise und Öffnungszeiten in diesem Plan sind Beispiele und
-            gehören zu keinem echten Betrieb. Wetter und Entfernungen sind echt berechnet.
+            {t.plan.mockNotice}
           </p>
         ) : null}
       </main>
@@ -239,11 +239,11 @@ export function PlanView({ initialPlan }: Props) {
         <div className="shell safe-bottom flex gap-2">
           {started ? (
             <Button size="lg" full variant="secondary" onClick={() => setFeedbackOpen(true)}>
-              Wie war&apos;s?
+              {t.plan.feedback}
             </Button>
           ) : (
             <Button size="lg" full onClick={start} icon={<span aria-hidden>🚀</span>}>
-              Los geht&apos;s
+              {t.plan.go}
             </Button>
           )}
         </div>

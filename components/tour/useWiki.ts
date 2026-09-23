@@ -15,17 +15,19 @@ const geladen = new Map<string, WikiInfo>();
  * Kurzbeschreibung und Bild einer Station aus dem verknüpften
  * Wikipedia-Artikel. `undefined` solange geladen wird, `null` ohne Artikel.
  */
-export function useWiki(artikel: string | undefined): WikiInfo | null | undefined {
+export function useWiki(artikel: string | undefined, sprache: string): WikiInfo | null | undefined {
+  // Pro Sprache eigener Eintrag – Text und Artikel hängen an der Sprache.
+  const schluessel = artikel ? `${sprache}|${artikel}` : undefined;
   const [info, setInfo] = useState<WikiInfo | null | undefined>(() =>
-    artikel ? geladen.get(artikel) : null,
+    schluessel ? geladen.get(schluessel) : null,
   );
 
   useEffect(() => {
-    if (!artikel) {
+    if (!artikel || !schluessel) {
       setInfo(null);
       return;
     }
-    const vorhanden = geladen.get(artikel);
+    const vorhanden = geladen.get(schluessel);
     if (vorhanden) {
       setInfo(vorhanden);
       return;
@@ -33,11 +35,11 @@ export function useWiki(artikel: string | undefined): WikiInfo | null | undefine
 
     let aktiv = true;
     setInfo(undefined);
-    fetch(`/api/wiki?t=${encodeURIComponent(artikel)}`)
+    fetch(`/api/wiki?t=${encodeURIComponent(artikel)}&lang=${encodeURIComponent(sprache)}`)
       .then((res) => (res.ok ? (res.json() as Promise<WikiInfo>) : null))
       .then((data) => {
         const wert = data ?? { text: null, bild: null, link: null };
-        geladen.set(artikel, wert);
+        geladen.set(schluessel, wert);
         if (aktiv) setInfo(wert);
       })
       .catch(() => {
@@ -46,7 +48,7 @@ export function useWiki(artikel: string | undefined): WikiInfo | null | undefine
     return () => {
       aktiv = false;
     };
-  }, [artikel]);
+  }, [artikel, schluessel, sprache]);
 
   return info;
 }

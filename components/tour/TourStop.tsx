@@ -1,19 +1,12 @@
 'use client';
 
 import { motion } from 'motion/react';
-import { formatDistance } from '@/lib/geo';
-import { clockFromMinutes, formatClock, formatDuration, openUntil } from '@/lib/time';
-import { formatPrice } from '@/components/plan/PlanTimeline';
+import { clockFromMinutes, formatClock, openUntil } from '@/lib/time';
+import { useLocale } from '@/components/LocaleProvider';
+import { distance, duration, kind, price, reason } from '@/lib/i18n/format';
 import { Clock, Coffee, DoorOpen, Footprints, Navigation, Refresh } from '@/components/ui/icons';
 import type { Mobility, PlanStep } from '@/types/domain';
 import { useWiki } from './useWiki';
-
-const UNTERWEGS: Record<Mobility, string> = {
-  walk: 'zu Fuß',
-  bike: 'mit dem Rad',
-  transit: 'mit Bus & Bahn',
-  car: 'mit dem Auto',
-};
 
 type Props = {
   step: PlanStep;
@@ -47,6 +40,7 @@ export function TourStop({
   index,
   departISO,
 }: Props) {
+  const { t } = useLocale();
   const travel = step.travelFromPrevious;
 
   return (
@@ -57,20 +51,23 @@ export function TourStop({
           {departISO ? null : <Linie />}
           {departISO ? (
             <span className="font-semibold tabular-nums text-ink-soft">
-              Los um {formatClock(departISO, 'de', tzOffsetMin)} ·
+              {t.plan.departAt(formatClock(departISO, 'de', tzOffsetMin))}
             </span>
           ) : null}
           {travel.durationMin > 0 ? (
             <>
               <Footprints size={15} className="shrink-0 text-ink-faint" />
               <span>
-                {travel.estimated ? 'ca. ' : ''}
-                {formatDuration(travel.durationMin)} {UNTERWEGS[travel.mode]} ·{' '}
-                {formatDistance(travel.distanceMeters)}
+                {t.tour.travel(
+                  duration(t, travel.durationMin),
+                  t.map.modes[travel.mode],
+                  distance(t, travel.distanceMeters),
+                  travel.estimated,
+                )}
               </span>
             </>
           ) : (
-            <span>direkt hier</span>
+            <span>{t.plan.directHere}</span>
           )}
         </div>
       ) : null}
@@ -145,8 +142,10 @@ type StationProps = {
 };
 
 function Station({ step, currency, tzOffsetMin, onReplace, highlight, index = 0 }: StationProps) {
-  const wiki = useWiki(step.place.wikipedia);
-  const beschreibung = wiki?.text ?? step.reason;
+  const { t, locale } = useLocale();
+  const wiki = useWiki(step.place.wikipedia, locale);
+  // Wikipedia-Text nur in der Sprache des Nutzers; sonst unsere eigene Begründung.
+  const beschreibung = wiki?.text ?? reason(t, step);
   const laedt = wiki === undefined;
 
   return (
@@ -168,14 +167,14 @@ function Station({ step, currency, tzOffsetMin, onReplace, highlight, index = 0 
             {formatClock(step.startISO, 'de', tzOffsetMin)}–{formatClock(step.endISO, 'de', tzOffsetMin)}
           </span>
           <span className="text-ink-faint">·</span>
-          <span>{formatDuration(step.durationMin)} Aufenthalt</span>
+          <span>{t.tour.stay(duration(t, step.durationMin))}</span>
         </div>
 
         <h3 className="mt-1 text-[1.12rem] font-bold leading-snug tracking-tight">
           {step.place.name}
         </h3>
         <p className="mt-0.5 text-[0.8rem] text-ink-muted">
-          {step.place.kind} · {formatPrice(step.price, currency)}
+          {kind(t, step.place.kind)} · {price(t, step.price, currency)}
         </p>
 
         {laedt ? (
@@ -186,14 +185,14 @@ function Station({ step, currency, tzOffsetMin, onReplace, highlight, index = 0 
         ) : (
           <p className="mt-2 text-[0.87rem] leading-relaxed text-ink-soft">
             <span className="line-clamp-3">{beschreibung}</span>
-            {wiki?.link ? (
+            {wiki?.link && wiki.text ? (
               <a
                 href={wiki.link}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-0.5 inline-block text-[0.7rem] text-ink-faint underline-offset-2 hover:underline"
               >
-                Quelle: Wikipedia
+                {t.tour.source}
               </a>
             ) : null}
           </p>
@@ -210,14 +209,15 @@ function Station({ step, currency, tzOffsetMin, onReplace, highlight, index = 0 
             rel="noopener noreferrer"
             className="tap inline-flex h-9 items-center gap-1.5 rounded-xl bg-canvas-sunk px-3 text-[0.8rem] font-semibold text-ink-soft"
           >
-            <Navigation size={14} /> Hinführen
+            <Navigation size={14} /> {t.tour.navigate}
           </a>
           <button
             type="button"
             onClick={() => onReplace(step)}
+            aria-label={t.plan.replaceAria(step.place.name)}
             className="tap inline-flex h-9 items-center gap-1.5 rounded-xl bg-canvas-sunk px-3 text-[0.8rem] font-semibold text-ink-soft"
           >
-            <Refresh size={14} /> Ersetzen
+            <Refresh size={14} /> {t.plan.replace}
           </button>
         </div>
       </div>
@@ -268,12 +268,13 @@ function Eindruck({
 }
 
 function Oeffnung({ step, tzOffsetMin }: { step: PlanStep; tzOffsetMin?: number }) {
+  const { t } = useLocale();
   const hours = step.place.openingHours;
 
   if (!hours) {
     return (
       <Hinweis tone="sun">
-        <DoorOpen size={14} /> Öffnungszeiten nicht verfügbar
+        <DoorOpen size={14} /> {t.plan.hoursUnknown}
       </Hinweis>
     );
   }
@@ -284,7 +285,7 @@ function Oeffnung({ step, tzOffsetMin }: { step: PlanStep; tzOffsetMin?: number 
     // geöffnet), lieber deutlich sagen als schweigen.
     return (
       <Hinweis tone="brand">
-        <DoorOpen size={14} /> Zu dieser Zeit geschlossen
+        <DoorOpen size={14} /> {t.tour.closedThen}
       </Hinweis>
     );
   }
@@ -296,10 +297,10 @@ function Oeffnung({ step, tzOffsetMin }: { step: PlanStep; tzOffsetMin?: number 
     <Hinweis tone="mint">
       <DoorOpen size={14} />
       {rundUmDieUhr
-        ? 'Rund um die Uhr geöffnet'
+        ? t.tour.open24
         : bis === 1440
-          ? 'Geöffnet bis Mitternacht'
-          : `Geöffnet bis ${clockFromMinutes(bis)}`}
+          ? t.tour.openMidnight
+          : t.tour.openUntil(clockFromMinutes(bis))}
     </Hinweis>
   );
 }
@@ -321,6 +322,7 @@ function Hinweis({ tone, children }: { tone: 'mint' | 'sun' | 'brand'; children:
 
 /** Kompakte Zeile für eine Kaffee- oder Mittagspause. */
 function Pause({ step, currency, tzOffsetMin, onReplace, highlight }: StationProps) {
+  const { t } = useLocale();
   return (
     <div
       className={[
@@ -333,33 +335,23 @@ function Pause({ step, currency, tzOffsetMin, onReplace, highlight }: StationPro
           <span className="tabular-nums">
             {formatClock(step.startISO, 'de', tzOffsetMin)}–{formatClock(step.endISO, 'de', tzOffsetMin)}
           </span>{' '}
-          · {step.reason.replace(/\.$/, '')}
+          · {reason(t, step).replace(/\.$/, '')}
         </p>
         <p className="truncate text-[0.95rem] font-semibold">{step.place.name}</p>
         <p className="text-[0.78rem] text-ink-muted">
-          {step.place.kind} · {formatDuration(step.durationMin)} · {formatPrice(step.price, currency)}
+          {kind(t, step.place.kind)} · {duration(t, step.durationMin)} · {price(t, step.price, currency)}
         </p>
       </div>
       <button
         type="button"
         onClick={() => onReplace(step)}
-        aria-label={`${step.place.name} ersetzen`}
+        aria-label={t.plan.replaceAria(step.place.name)}
         className="tap grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-canvas-sunk text-ink-soft"
       >
         <Refresh size={15} />
       </button>
     </div>
   );
-}
-
-/** Route von hier (Gerätestandort) zur Station in der Karten-App. */
-function navigationUrl(step: PlanStep): string {
-  const { lat, lon } = step.place.location;
-  const url = new URL('https://www.google.com/maps/dir/');
-  url.searchParams.set('api', '1');
-  url.searchParams.set('destination', `${lat.toFixed(5)},${lon.toFixed(5)}`);
-  url.searchParams.set('travelmode', TRAVEL_MODE[step.travelFromPrevious.mode]);
-  return url.toString();
 }
 
 const TRAVEL_MODE: Record<Mobility, string> = {
@@ -369,4 +361,12 @@ const TRAVEL_MODE: Record<Mobility, string> = {
   car: 'driving',
 };
 
-export { navigationUrl };
+/** Route von hier (Gerätestandort) zur Station in der Karten-App. */
+export function navigationUrl(step: PlanStep): string {
+  const { lat, lon } = step.place.location;
+  const url = new URL('https://www.google.com/maps/dir/');
+  url.searchParams.set('api', '1');
+  url.searchParams.set('destination', `${lat.toFixed(5)},${lon.toFixed(5)}`);
+  url.searchParams.set('travelmode', TRAVEL_MODE[step.travelFromPrevious.mode]);
+  return url.toString();
+}

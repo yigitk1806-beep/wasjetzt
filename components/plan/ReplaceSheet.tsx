@@ -4,52 +4,54 @@ import { useState } from 'react';
 import { Sheet } from '@/components/ui/Sheet';
 import { Chip } from '@/components/ui/Chip';
 import { Spinner } from '@/components/ui/Button';
+import { useLocale } from '@/components/LocaleProvider';
+import type { Dictionary } from '@/lib/i18n';
 import type { PlanStep } from '@/types/domain';
 
 export type ReplaceOption = {
   hint: string;
   emoji: string;
-  label: string;
+  label: (t: Dictionary) => string;
   /** Wird nur angezeigt, wenn sie für diesen Schritt sinnvoll ist. */
   relevant: (step: PlanStep) => boolean;
 };
 
 const OPTIONS: ReplaceOption[] = [
-  { hint: 'any', emoji: '🔄', label: 'Etwas anderes', relevant: () => true },
+  { hint: 'any', emoji: '🔄', label: (t) => t.replace.options.any, relevant: () => true },
   {
     hint: 'cheaper',
     emoji: '💸',
-    label: 'Günstiger',
+    label: (t) => t.replace.options.cheaper,
     relevant: (step) => step.place.price.level > 0,
   },
   {
     hint: 'faster',
     emoji: '⏱️',
-    label: 'Schneller',
+    label: (t) => t.replace.options.faster,
     relevant: (step) => step.durationMin > 60,
   },
   {
     hint: 'romantic',
     emoji: '❤️',
-    label: 'Romantischer',
+    label: (t) => t.replace.options.romantic,
     relevant: (step) => step.place.scores.romantic < 0.7,
   },
   {
     hint: 'action',
     emoji: '🔥',
-    label: 'Mehr Action',
+    label: (t) => t.replace.options.action,
     relevant: (step) => step.place.scores.action < 0.6,
   },
   {
     hint: 'indoor',
     emoji: '🏠',
-    label: 'Drinnen',
+    label: (t) => t.replace.options.indoor,
     relevant: (step) => step.place.indoorOutdoor !== 'indoor',
   },
   {
     hint: 'new',
     emoji: '🆕',
-    label: 'Etwas Neues',
+    label: (t) => t.replace.options.new,
     relevant: (step) => step.place.scores.novelty < 0.8,
   },
 ];
@@ -67,6 +69,7 @@ type Props = {
 
 /** Anpassungen erscheinen nur, wenn sie zum konkreten Schritt passen. */
 export function ReplaceSheet({ step, onClose, onReplace, error, options: eigene, note }: Props) {
+  const { t } = useLocale();
   const [busyHint, setBusyHint] = useState<string | null>(null);
 
   const options = step ? (eigene ?? OPTIONS).filter((option) => option.relevant(step)) : [];
@@ -77,10 +80,10 @@ export function ReplaceSheet({ step, onClose, onReplace, error, options: eigene,
       onClose={() => {
         if (!busyHint) onClose();
       }}
-      title={step ? `${step.place.emoji} ${step.place.name} ersetzen` : undefined}
+      title={step ? `${step.place.emoji} ${t.replace.title(step.place.name)}` : undefined}
     >
       <p className="mb-4 text-[0.88rem] text-ink-muted">
-        {note ?? 'Der Rest des Plans bleibt so, wie er ist.'}
+        {note ?? t.replace.note}
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -97,10 +100,10 @@ export function ReplaceSheet({ step, onClose, onReplace, error, options: eigene,
           >
             {busyHint === option.hint ? (
               <span className="flex items-center gap-2">
-                <Spinner className="h-3.5 w-3.5" /> {option.label}
+                <Spinner className="h-3.5 w-3.5" /> {option.label(t)}
               </span>
             ) : (
-              option.label
+              option.label(t)
             )}
           </Chip>
         ))}

@@ -15,7 +15,9 @@ import { GroupPanel } from '@/components/plan/GroupPanel';
 import { FeedbackSheet } from '@/components/plan/FeedbackSheet';
 import { PlanHeader } from '@/components/plan/PlanHeader';
 import { TimeSheet } from '@/components/plan/TimeSheet';
-import { formatClock, formatDuration } from '@/lib/time';
+import { formatClock } from '@/lib/time';
+import { useLocale } from '@/components/LocaleProvider';
+import { duration, errorText, noteText } from '@/lib/i18n/format';
 import { recordPlanStarted } from '@/lib/clientStore';
 import { replacePlanStep, requestPlanStreamed, type PlanPhase } from '@/lib/planClient';
 import type { Plan, PlanStep, TourTweak } from '@/types/domain';
@@ -28,39 +30,40 @@ const PlanMap = dynamic(() => import('@/components/plan/PlanMap').then((m) => m.
 
 /** Beim Ersetzen einer Sehenswürdigkeit – nur, was hier Sinn ergibt. */
 const ERSETZEN: ReplaceOption[] = [
-  { hint: 'any', emoji: '🔄', label: 'Etwas anderes', relevant: () => true },
+  { hint: 'any', emoji: '🔄', label: (t) => t.replace.tourOptions.any, relevant: () => true },
   {
     hint: 'indoor',
     emoji: '🏛️',
-    label: 'Lieber drinnen',
+    label: (t) => t.replace.tourOptions.indoor,
     relevant: (step) => step.place.indoorOutdoor !== 'indoor' && Boolean(step.place.themes?.length),
   },
   {
     hint: 'new',
     emoji: '💎',
-    label: 'Ein Geheimtipp',
+    label: (t) => t.replace.tourOptions.new,
     relevant: (step) => Boolean(step.place.themes?.length),
   },
   {
     hint: 'cheaper',
     emoji: '🆓',
-    label: 'Kostenlos',
+    label: (t) => t.replace.tourOptions.cheaper,
     relevant: (step) => step.place.price.level > 0 && Boolean(step.place.themes?.length),
   },
 ];
 
 /** Die ganze Tour in eine Richtung drehen – ohne Formular. */
-const ANPASSEN: Array<{ tweak: TourTweak; emoji: string; label: string }> = [
-  { tweak: 'less-walk', emoji: '👟', label: 'Weniger laufen' },
-  { tweak: 'museum', emoji: '🏛️', label: 'Mehr Museen' },
-  { tweak: 'photo', emoji: '📸', label: 'Mehr Fotospots' },
-  { tweak: 'free', emoji: '🆓', label: 'Nur kostenlos' },
-  { tweak: 'calm', emoji: '😌', label: 'Entspannter' },
-];
+const ANPASSEN = [
+  { tweak: 'less-walk', emoji: '👟' },
+  { tweak: 'museum', emoji: '🏛️' },
+  { tweak: 'photo', emoji: '📸' },
+  { tweak: 'free', emoji: '🆓' },
+  { tweak: 'calm', emoji: '😌' },
+] as const satisfies ReadonlyArray<{ tweak: TourTweak; emoji: string }>;
 
 type Props = { initialPlan: Plan };
 
 export function TourView({ initialPlan }: Props) {
+  const { t } = useLocale();
   const router = useRouter();
   const [plan, setPlan] = useState(initialPlan);
   const [replacing, setReplacing] = useState<PlanStep | null>(null);
@@ -137,11 +140,9 @@ export function TourView({ initialPlan }: Props) {
         setReplacing(null);
         return;
       }
-      setReplaceError(
-        result.message ?? result.error ?? 'Hier in der Nähe gibt es gerade keine passende Alternative.',
-      );
+      setReplaceError(errorText(t, result, t.tour.replaceFailed));
     },
-    [plan.id, replacing],
+    [plan.id, replacing, t],
   );
 
   const adjustForWeather = useCallback(async () => {
@@ -188,7 +189,7 @@ export function TourView({ initialPlan }: Props) {
     }
     setRegenerating(false);
     setPhase(null);
-    setTweakError(response.message ?? response.error ?? 'Dafür finde ich hier gerade keine Tour.');
+    setTweakError(errorText(t, response, t.tour.tweakFailed));
   }
 
   function oeffnen(url: string) {
@@ -223,7 +224,7 @@ export function TourView({ initialPlan }: Props) {
         <Link
           href="/entdecken"
           className="tap -ml-2 grid h-10 w-10 place-items-center rounded-full text-ink-soft"
-          aria-label="Zurück"
+          aria-label={t.common.back}
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path
@@ -240,7 +241,7 @@ export function TourView({ initialPlan }: Props) {
           onClick={() => setShareOpen(true)}
           className="tap -mr-2 flex h-10 items-center gap-1.5 rounded-full px-3 text-[0.86rem] font-semibold text-ink-soft"
         >
-          <Share size={16} /> Teilen
+          <Share size={16} /> {t.common.share}
         </button>
       </header>
 
@@ -260,16 +261,14 @@ export function TourView({ initialPlan }: Props) {
                   🌧️
                 </span>
                 <div className="flex-1">
-                  <p className="text-[0.9rem] font-semibold">Es soll regnen.</p>
-                  <p className="mt-0.5 text-[0.84rem] text-ink-soft">
-                    Ich kann die Stationen unter freiem Himmel gegen etwas Überdachtes tauschen.
-                  </p>
+                  <p className="text-[0.9rem] font-semibold">{t.tour.rainTitle}</p>
+                  <p className="mt-0.5 text-[0.84rem] text-ink-soft">{t.tour.rainHint}</p>
                   <div className="mt-2.5 flex gap-2">
                     <Button size="sm" loading={adjusting} onClick={() => void adjustForWeather()}>
-                      Tour anpassen
+                      {t.tour.adjust}
                     </Button>
                     <Button size="sm" variant="quiet" onClick={() => setWeatherAlert(null)}>
-                      Passt schon
+                      {t.plan.fine}
                     </Button>
                   </div>
                 </div>
@@ -286,7 +285,7 @@ export function TourView({ initialPlan }: Props) {
           home={plan.request.homeLocation}
         />
 
-        <ol aria-label={`${stationen} Stationen`}>
+        <ol aria-label={t.tour.stationsAria(stationen)}>
           {plan.steps.map((step, index) => (
             <TourStop
               key={step.id}
@@ -310,18 +309,15 @@ export function TourView({ initialPlan }: Props) {
             <li className="relative pl-12">
               <div className="flex items-center gap-2 py-2.5 text-[0.78rem] text-ink-muted">
                 <span aria-hidden>🚶</span>
-                <span>
-                  Rückweg {plan.returnHome.estimated ? 'ca. ' : ''}
-                  {formatDuration(plan.returnHome.durationMin)}
-                </span>
+                <span>{t.plan.returnWay(duration(t, plan.returnHome.durationMin), plan.returnHome.estimated)}</span>
               </div>
               <div className="flex items-center gap-3 rounded-3xl bg-canvas-sunk px-4 py-3">
                 <span aria-hidden className="text-xl">🏠</span>
-                <p className="text-[0.92rem] font-semibold">
-                  Zuhause {plan.returnHome.estimated ? 'ca. ' : 'um '}
-                  <span className="tabular-nums">
-                    {formatClock(plan.returnHome.arriveISO, 'de', plan.tzOffsetMin)}
-                  </span>
+                <p className="text-[0.92rem] font-semibold tabular-nums">
+                  {t.plan.homeAt(
+                    formatClock(plan.returnHome.arriveISO, 'de', plan.tzOffsetMin),
+                    plan.returnHome.estimated,
+                  )}
                 </p>
               </div>
             </li>
@@ -336,14 +332,14 @@ export function TourView({ initialPlan }: Props) {
                 className="flex gap-2 rounded-2xl bg-canvas-sunk px-3.5 py-2.5 text-[0.84rem] text-ink-soft"
               >
                 <span aria-hidden>{NOTE_EMOJI[note.kind]}</span>
-                <span>{note.text}</span>
+                <span>{noteText(t, note)}</span>
               </li>
             ))}
           </ul>
         ) : null}
 
         <section className="space-y-2.5">
-          <h2 className="text-[0.95rem] font-bold tracking-tight">Tour anpassen</h2>
+          <h2 className="text-[0.95rem] font-bold tracking-tight">{t.tour.adjustTitle}</h2>
           <div className="-mx-[1.15rem] edge-fade">
             <div className="scroll-x px-[1.15rem]">
               {ANPASSEN.map((option) => (
@@ -353,7 +349,7 @@ export function TourView({ initialPlan }: Props) {
                   disabled={regenerating}
                   onClick={() => void anpassen(option.tweak)}
                 >
-                  {option.label}
+                  {t.tour.tweaks[option.tweak]}
                 </Chip>
               ))}
             </div>
@@ -368,8 +364,7 @@ export function TourView({ initialPlan }: Props) {
         <GroupPanel plan={plan} onPlanChange={setPlan} />
 
         <p className="px-1 text-[0.72rem] leading-relaxed text-ink-faint">
-          Orte und Öffnungszeiten: OpenStreetMap. Bilder und Beschreibungen: Wikipedia.
-          Gehzeiten sind geschätzt.
+          {t.tour.sources}
         </p>
       </main>
 
@@ -378,18 +373,18 @@ export function TourView({ initialPlan }: Props) {
         <div className="shell safe-bottom">
           {!gestartet ? (
             <Button size="lg" full onClick={starten} icon={<span aria-hidden>🚀</span>}>
-              Tour starten
+              {t.tour.start}
             </Button>
           ) : fertig ? (
             <Button size="lg" full variant="secondary" onClick={() => setFeedbackOpen(true)}>
-              Wie war&apos;s?
+              {t.plan.feedback}
             </Button>
           ) : (
             <Button size="lg" full onClick={weiter}>
               <span className="truncate">
                 {naechster
-                  ? `Weiter: ${nummern[position + 1] ?? 'Pause'} · ${naechster.place.name}`
-                  : 'Tour beenden'}
+                  ? t.tour.next(String(nummern[position + 1] ?? t.tour.breakLabel), naechster.place.name)
+                  : t.tour.finish}
               </span>
             </Button>
           )}
@@ -402,7 +397,7 @@ export function TourView({ initialPlan }: Props) {
         onReplace={handleReplace}
         error={replaceError}
         options={ERSETZEN}
-        note="Der Rest der Tour bleibt, nur die Zeiten danach verschieben sich."
+        note={t.replace.noteTour}
       />
       <ShareSheet plan={plan} open={shareOpen} onClose={() => setShareOpen(false)} />
       <TimeSheet plan={plan} open={timeOpen} onClose={() => setTimeOpen(false)} onPlanChange={setPlan} />

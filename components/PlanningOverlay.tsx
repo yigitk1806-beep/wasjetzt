@@ -3,18 +3,14 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { Activity, Heart, TreePine, Users, Utensils } from '@/components/ui/icons';
+import { useLocale } from '@/components/LocaleProvider';
 import type { PlanPhase } from '@/lib/planClient';
 
 /**
  * Die Abschnitte der Planung, in der Reihenfolge, in der sie laufen.
- * Der Text kommt von hier, der Fortschritt vom Server.
+ * Der Text kommt aus dem Wörterbuch, der Fortschritt vom Server.
  */
-const SCHRITTE: Array<{ phase: PlanPhase; kurz: string; text: string }> = [
-  { phase: 'orte', kurz: 'Orte', text: 'Orte finden …' },
-  { phase: 'wetter', kurz: 'Wetter', text: 'Wetter prüfen …' },
-  { phase: 'wege', kurz: 'Wege', text: 'Wege berechnen …' },
-  { phase: 'plan', kurz: 'Plan', text: 'Plan erstellen …' },
-];
+const PHASEN: PlanPhase[] = ['orte', 'wetter', 'wege', 'plan'];
 
 /** Was gerade zusammengestellt wird – dieselben Kategorien wie im Produkt. */
 const MOTIVE = [Heart, Users, Utensils, Activity, TreePine];
@@ -33,6 +29,8 @@ type Props = {
  * Abschnitt nur Millisekunden, springt die Anzeige auch sofort weiter.
  */
 export function PlanningOverlay({ open, phase }: Props) {
+  const { t } = useLocale();
+  const SCHRITTE = PHASEN.map((p) => ({ phase: p, kurz: t.overlay.phases[p].short, text: t.overlay.phases[p].text }));
   const [motiv, setMotiv] = useState(0);
 
   useEffect(() => {
@@ -118,8 +116,8 @@ export function PlanningOverlay({ open, phase }: Props) {
             {/* Haupttext */}
             <p className="mt-7 max-w-[19rem] text-center text-[1.02rem] font-semibold leading-snug tracking-tight">
               {letzterSchritt
-                ? 'Fast fertig …'
-                : 'Wir suchen gerade etwas Gutes für euch …'}
+                ? t.overlay.almost
+                : t.overlay.searching}
             </p>
 
             {/* Aktueller Abschnitt */}

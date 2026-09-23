@@ -4,8 +4,11 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
 import { loadRecentPlans, type RecentPlan } from '@/lib/clientStore';
+import { useLocale } from '@/components/LocaleProvider';
+import { recentSummary, recentTitle } from '@/lib/i18n/format';
 
 export default function PlansPage() {
+  const { t, locale } = useLocale();
   const [plans, setPlans] = useState<RecentPlan[] | null>(null);
 
   useEffect(() => {
@@ -14,7 +17,7 @@ export default function PlansPage() {
 
   return (
     <main className="shell space-y-5 pt-8">
-      <h1 className="text-[2rem] font-bold tracking-[-0.03em]">Deine Pläne</h1>
+      <h1 className="text-[2rem] font-bold tracking-[-0.03em]">{t.plans.title}</h1>
 
       {plans === null ? (
         <div className="space-y-2.5">
@@ -27,15 +30,13 @@ export default function PlansPage() {
           <span className="text-3xl" aria-hidden>
             ✨
           </span>
-          <p className="mt-3 text-[0.95rem] font-semibold">Noch nichts geplant.</p>
-          <p className="mt-1 text-[0.86rem] text-ink-muted">
-            Sobald du einen Plan startest, taucht er hier auf.
-          </p>
+          <p className="mt-3 text-[0.95rem] font-semibold">{t.plans.empty}</p>
+          <p className="mt-1 text-[0.86rem] text-ink-muted">{t.plans.emptyHint}</p>
           <Link
             href="/"
             className="tap mt-4 inline-flex h-11 items-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 px-5 text-[0.92rem] font-semibold text-white shadow-lift"
           >
-            Jetzt los
+            {t.plans.cta}
           </Link>
         </div>
       ) : (
@@ -55,12 +56,12 @@ export default function PlansPage() {
                   {plan.emojis.slice(0, 3).join(' ')}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold">{plan.title}</span>
+                  <span className="block truncate font-semibold">{recentTitle(t, plan)}</span>
                   <span className="block truncate text-[0.82rem] text-ink-muted">
-                    {plan.summary}
+                    {recentSummary(t, plan)}
                   </span>
                   <span className="block text-[0.74rem] text-ink-faint">
-                    {new Date(plan.startISO).toLocaleDateString('de', {
+                    {new Date(plan.startISO).toLocaleDateString(locale, {
                       weekday: 'short',
                       day: '2-digit',
                       month: '2-digit',
@@ -74,7 +75,7 @@ export default function PlansPage() {
       )}
 
       <p className="text-[0.76rem] leading-relaxed text-ink-faint">
-        Die Liste liegt nur in diesem Browser. Geteilte Pläne selbst verfallen nach 24 Stunden.
+        {t.plans.footer}
       </p>
     </main>
   );

@@ -10,10 +10,12 @@ export const runtime = 'nodejs';
  * bleibt es weg. Texte stehen unter CC BY-SA; die Oberfläche verlinkt
  * deshalb immer auf den Artikel.
  *
- * Im Ausland verweist OSM meist auf den Artikel in der Landessprache
- * („fr:Tour Eiffel"). Gibt es dazu einen deutschen Artikel, wird der genommen.
+ * OSM verweist meist auf den Artikel in der Landessprache („fr:Tour Eiffel").
+ * Gewünscht ist die Sprache des Nutzers (`lang`). Gibt es dort keinen Artikel,
+ * kommt nur das Bild – ein fremdsprachiger Text mitten in einer sonst
+ * englischen Oberfläche wäre schlechter als gar keiner.
  *
- * Aufruf: /api/wiki?t=de:Brandenburger%20Tor
+ * Aufruf: /api/wiki?t=de:Brandenburger%20Tor&lang=en
  */
 
 type Summary = {
@@ -31,7 +33,7 @@ type Antwort = {
 };
 
 const LEER: Antwort = { text: null, bild: null, link: null };
-const ZIELSPRACHE = 'de';
+const UNTERSTUETZT = ['de', 'en', 'fr', 'es', 'it', 'tr'];
 const UA = { 'User-Agent': 'WasJetzt/0.1 (Freizeitplaner)' };
 
 const cache = new Map<string, { at: number; data: Antwort }>();
@@ -44,7 +46,10 @@ const TTL_MS = 24 * 60 * 60 * 1000;
 const SPRACHE = /^[a-z]{2,3}(-[a-z]{2,8})?$/;
 
 export async function GET(request: Request) {
-  const t = new URL(request.url).searchParams.get('t') ?? '';
+  const params = new URL(request.url).searchParams;
+  const t = params.get('t') ?? '';
+  const wunsch = params.get('lang') ?? 'de';
+  const ziel = UNTERSTUETZT.includes(wunsch) ? wunsch : 'de';
   const trenner = t.indexOf(':');
   const lang = trenner > 0 ? t.slice(0, trenner) : '';
   const titel = trenner > 0 ? t.slice(trenner + 1).trim() : '';
@@ -53,18 +58,25 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Ungültiger Artikel.' }, { status: 400 });
   }
 
-  const key = `${lang}:${titel}`;
+  const key = `${ziel}|${lang}:${titel}`;
   const cached = cache.get(key);
   if (cached && Date.now() - cached.at < TTL_MS) return antworten(cached.data);
 
   try {
     let data: Antwort | null = null;
 
-    if (lang !== ZIELSPRACHE) {
-      const deutsch = await deutscherTitel(lang, titel);
-      if (deutsch) data = await zusammenfassung(ZIELSPRACHE, deutsch);
+    if (lang === ziel) {
+      data = await zusammenfassung(lang, titel);
+    } else {
+      const uebersetzt = await titelIn(lang, titel, ziel);
+      if (uebersetzt) data = await zusammenfassung(ziel, uebersetzt);
+      if (!data) {
+        // Kein Artikel in der Sprache des Nutzers: Bild ja, fremder Text nein.
+        const original = await zusammenfassung(lang, titel);
+        data = original ? { text: null, bild: original.bild, link: original.link } : null;
+      }
     }
-    if (!data) data = (await zusammenfassung(lang, titel)) ?? LEER;
+    data = data ?? LEER;
 
     cache.set(key, { at: Date.now(), data });
     return antworten(data);
@@ -91,12 +103,12 @@ async function zusammenfassung(lang: string, titel: string): Promise<Antwort | n
   };
 }
 
-/** Titel des deutschen Artikels zum selben Thema, falls es einen gibt. */
-async function deutscherTitel(lang: string, titel: string): Promise<string | null> {
+/** Titel des Artikels zum selben Thema in der Zielsprache, falls es einen gibt. */
+async function titelIn(lang: string, titel: string, ziel: string): Promise<string | null> {
   const url = new URL(`https://${lang}.wikipedia.org/w/api.php`);
   url.searchParams.set('action', 'query');
   url.searchParams.set('prop', 'langlinks');
-  url.searchParams.set('lllang', ZIELSPRACHE);
+  url.searchParams.set('lllang', ziel);
   url.searchParams.set('titles', titel);
   url.searchParams.set('redirects', '1');
   url.searchParams.set('format', 'json');

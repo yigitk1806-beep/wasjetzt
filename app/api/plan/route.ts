@@ -11,6 +11,7 @@ import { variantByKey } from '@/engine/scoring';
 import { buildTour } from '@/engine/tourBuilder';
 import { getProviders } from '@/providers/registry';
 import { normalizePlanRequest, normalizePreferences, RequestError } from '@/lib/requestSchema';
+import { dictionaryFor } from '@/lib/i18n';
 import {
   clockFromMinutes,
   formatClock,
@@ -35,7 +36,15 @@ type PhaseReporter = (phase: PlanPhase) => void;
 
 type PipelineResult =
   | { ok: true; plan: Plan; variants: Plan[]; understood: string[]; weatherSource: string }
-  | { ok: false; status: number; error: string; message?: string; understood?: string[] };
+  | {
+      ok: false;
+      status: number;
+      /** Code für die Oberfläche – sie übersetzt ihn in die Sprache des Nutzers. */
+      error: string;
+      params?: Record<string, string | number>;
+      message?: string;
+      understood?: string[];
+    };
 
 /**
  * Erstellt einen Plan. Body: { ...PlanRequest-Felder, preferences?, variants?, surprise? }
@@ -72,7 +81,7 @@ export async function POST(request: Request) {
         send('result', result);
       } catch (error) {
         console.error('[api/plan] Strom abgebrochen', error);
-        send('result', { ok: false, status: 500, error: 'Die Planung ist fehlgeschlagen.' });
+        send('result', { ok: false, status: 500, error: 'failed' });
       } finally {
         controller.close();
       }
@@ -91,7 +100,7 @@ export async function POST(request: Request) {
 function antwort(result: PipelineResult) {
   if (!result.ok) {
     return NextResponse.json(
-      { error: result.error, message: result.message, understood: result.understood },
+      { error: result.error, params: result.params, message: result.message, understood: result.understood },
       { status: result.status },
     );
   }
@@ -164,40 +173,36 @@ async function runPipeline(
     const plans = kandidaten.filter((p): p is Plan => Boolean(p));
 
     if (plans.length === 0) {
+      const t = dictionaryFor(planRequest.language);
       // Mit Heimkehrzeit kann das Fenster schlicht zu kurz sein – das sagen
       // wir so, statt "nichts gefunden".
       const fensterMin = (ctx.latestEnd.getTime() - ctx.start.getTime()) / 60_000;
       if (ctx.request.mustBeHomeByISO && fensterMin < 75) {
-        const uhr = formatClock(ctx.request.mustBeHomeByISO, 'de', ctx.tzOffsetMin);
+        const time = formatClock(ctx.request.mustBeHomeByISO, 'de', ctx.tzOffsetMin);
         return {
           ok: false,
           status: 200,
-          error: 'no-plan',
-          message: `Bis ${uhr} Uhr zuhause ist zu knapp – mit Hin- und Rückweg passt nichts Sinnvolles mehr hinein.`,
+          error: 'window-too-short',
+          params: { time },
+          message: t.errors['window-too-short'](time),
           understood,
         };
       }
       if (!isTour && fensterMin < 75) {
+        const minutes = Math.round(fensterMin);
         return {
           ok: false,
           status: 200,
-          error: 'no-plan',
-          message: `In ${formatDuration(Math.round(fensterMin))} finde ich gerade nichts, das offen und schnell genug erreichbar ist.`,
+          error: 'short-window',
+          params: { minutes },
+          message: t.errors['short-window'](formatDuration(minutes, planRequest.language)),
           understood,
         };
       }
-      return {
-        ok: false,
-        status: 200,
-        // Eigener Code, damit die Oberfläche es einmal still neu versuchen kann.
-        error: isTour && ctx.sightsUnavailable ? 'sights-unavailable' : 'no-plan',
-        message: !isTour
-          ? 'Dafür finde ich gerade nichts Passendes.'
-          : ctx.sightsUnavailable
-            ? 'Die Sehenswürdigkeiten konnten gerade nicht geladen werden. Versuch es in ein paar Sekunden nochmal.'
-            : 'Hier finde ich gerade zu wenige offene Sehenswürdigkeiten für eine Tour.',
-        understood,
-      };
+      // Eigener Code bei Tour-Ausfall, damit die Oberfläche es einmal still
+      // neu versuchen kann.
+      const code = !isTour ? 'no-plan' : ctx.sightsUnavailable ? 'sights-unavailable' : 'no-sights';
+      return { ok: false, status: 200, error: code, message: t.errors[code], understood };
     }
 
     // Jede Variante kennt ihre Geschwister, damit die UI ohne Neuplanung
@@ -242,13 +247,14 @@ async function runPipeline(
     };
   } catch (error) {
     if (error instanceof RequestError) {
-      return { ok: false, status: 400, error: error.message };
+      return { ok: false, status: 400, error: error.code, message: error.message };
     }
     console.error('[api/plan] unerwarteter Fehler', error);
     return {
       ok: false,
       status: 500,
-      error: 'Die Planung ist fehlgeschlagen. Versuch es gleich nochmal.',
+      error: 'failed',
+      message: 'Die Planung ist fehlgeschlagen. Versuch es gleich nochmal.',
     };
   }
 }

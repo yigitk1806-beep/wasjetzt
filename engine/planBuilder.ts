@@ -29,6 +29,7 @@ import type { ProviderSet } from '@/providers/registry';
 import { aggregateCost } from './budget';
 import { passesHardFilters } from './hardFilters';
 import { planSummary, planTitle, stepReason, tourSummary, tourTitle } from './narrative';
+import { begruendung, note } from './texts';
 import { scorePlace, VARIANTS, variantByKey } from './scoring';
 import { buildSlots } from './slots';
 import type { PlanContext, Slot, VariantProfile } from './types';
@@ -258,7 +259,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
     }
 
     steps.push(picked.step);
-    usedReasons.push(picked.step.reason);
+    usedReasons.push(picked.step.reasonKey ?? picked.step.reason);
     usedPlaceIds.add(picked.step.place.id);
     usedCategories.push(picked.step.place.category);
     cursor = new Date(picked.step.endISO);
@@ -411,7 +412,7 @@ function pickFromPool(input: PickInput, roles: Category[] | undefined): Picked |
           },
           price: { ...place.price },
           openingHoursKnown: place.openingHours !== null,
-          reason: stepReason(place, ctx, weatherAtStart, distanceMeters, input.usedReasons),
+          ...begruendung(ctx, stepReason(place, ctx, weatherAtStart, distanceMeters, input.usedReasons)),
         },
       };
     }
@@ -440,48 +441,35 @@ function buildNotes(ctx: PlanContext, steps: PlanStep[], dropped: number): PlanN
 
   if (mode === 'wet') {
     const outdoor = steps.filter((s) => s.place.indoorOutdoor === 'outdoor' && nassZu(s)).length;
-    notes.push({
-      kind: 'weather',
-      text:
+    notes.push(
+      note(
+        ctx,
+        'weather',
         outdoor === 0
           ? steps.every((s) => s.place.indoorOutdoor !== 'outdoor')
-            ? 'Alles drinnen – bei dem Wetter die bessere Wahl.'
-            : 'Wenn es regnet, seid ihr drinnen.'
-          : 'Ein Teil ist draußen. Zieht euch was Wasserdichtes an.',
-    });
+            ? 'weatherAllIndoor'
+            : 'weatherIndoorWhenRain'
+          : 'weatherPartOutdoor',
+      ),
+    );
   }
 
   if (ctx.request.mustBeHomeByISO && steps.length > 0) {
-    notes.push({
-      kind: 'time',
-      text: `Rückweg ist eingerechnet – ihr seid rechtzeitig zuhause.`,
-    });
+    notes.push(note(ctx, 'time', 'homeIncluded'));
   }
 
   const cost = aggregateCost(steps.map((s) => s.price));
   if (ctx.budgetCap !== undefined && cost.perPerson && cost.perPerson.max > ctx.budgetCap) {
-    notes.push({
-      kind: 'budget',
-      text: 'Im oberen Bereich kann es knapp über eurem Budget liegen.',
-    });
+    notes.push(note(ctx, 'budget', 'overBudget'));
   }
 
   const unknownHours = steps.filter((s) => !s.openingHoursKnown).length;
   if (unknownHours > 0) {
-    notes.push({
-      kind: 'availability',
-      text:
-        unknownHours === 1
-          ? 'Für einen Punkt sind keine Öffnungszeiten hinterlegt – vorher kurz prüfen.'
-          : `Für ${unknownHours} Punkte sind keine Öffnungszeiten hinterlegt – vorher kurz prüfen.`,
-    });
+    notes.push(note(ctx, 'availability', 'unknownHours', { count: unknownHours }));
   }
 
   if (dropped > 0 && steps.length > 0) {
-    notes.push({
-      kind: 'availability',
-      text: 'Für einen weiteren Programmpunkt war gerade nichts Passendes offen.',
-    });
+    notes.push(note(ctx, 'availability', 'droppedSlot'));
   }
 
   return notes;
@@ -510,10 +498,9 @@ export function buildPlan(
   if (steps.length === 0) return null;
   const plan = assemblePlan(ctx, steps, profile.key, droppedSlots);
   if (verschobenUm > 0) {
-    plan.notes.unshift({
-      kind: 'time',
-      text: `Um diese Uhrzeit hat noch kaum etwas geöffnet – der Plan beginnt deshalb um ${formatClock(steps[0].startISO, 'de', ctx.tzOffsetMin)} Uhr.`,
-    });
+    plan.notes.unshift(
+      note(ctx, 'time', 'lateStart', { time: formatClock(steps[0].startISO, 'de', ctx.tzOffsetMin) }),
+    );
   }
   return plan;
 }
@@ -550,12 +537,15 @@ export function assemblePlan(
       }
     : undefined;
   const fertig = returnHome?.arriveISO ?? endISO;
+  const titel = isTour ? tourTitle(ctx) : planTitle(ctx);
 
   return {
     id: existing?.id ?? shortId(10),
     shareCode: existing?.shareCode ?? shortId(6),
-    title: isTour ? tourTitle(ctx) : planTitle(ctx),
-    summary: isTour ? tourSummary(steps) : planSummary(steps, ctx),
+    title: titel.text,
+    titleKey: titel.key,
+    titleParams: titel.params,
+    summary: isTour ? tourSummary(steps, ctx) : planSummary(steps, ctx),
     variant,
     mode: isTour ? 'tour' : 'evening',
     steps,
@@ -733,8 +723,11 @@ function echteWegeImAltenZeitplan(plan: Plan, legs: TravelLeg[], ctx: PlanContex
 
 /** Alte Hinweise behalten, die der Neuaufbau nicht selbst erzeugt – ohne Dopplungen. */
 function mergeNotes(alt: PlanNote[], neu: PlanNote[]): PlanNote[] {
-  const texte = new Set(neu.map((n) => n.text));
-  const behalten = alt.filter((n) => (n.kind === 'time' || n.kind === 'info') && !texte.has(n.text));
+  const kennung = (n: PlanNote) => n.key ?? n.text;
+  const vorhanden = new Set(neu.map(kennung));
+  const behalten = alt.filter(
+    (n) => (n.kind === 'time' || n.kind === 'info') && !vorhanden.has(kennung(n)),
+  );
   return [...behalten, ...neu];
 }
 
@@ -766,12 +759,11 @@ export function homeByNote(
   const gewuenscht = zaehlen(ohne);
   if (gewuenscht <= passen) return null;
 
-  const uhr = formatClock(homeBy, 'de', ctx.tzOffsetMin);
-  const wort = passen === 1 ? 'Station' : 'Stationen';
-  return {
-    kind: 'time',
-    text: `Bis ${uhr} Uhr zuhause: Dafür passen ${passen} ${wort} – ${gewuenscht} würden zu spät enden.`,
-  };
+  return note(ctx, 'time', 'homeByFit', {
+    time: formatClock(homeBy, 'de', ctx.tzOffsetMin),
+    fit: passen,
+    wanted: gewuenscht,
+  });
 }
 
 export type ReplaceHint = 'any' | 'cheaper' | 'faster' | 'romantic' | 'action' | 'indoor' | 'new';
@@ -816,7 +808,7 @@ export function replaceStep(
     usedCategories: before.map((s) => s.place.category),
     previousCategory: before[before.length - 1]?.place.category,
     reserveMinutes: reserveMinutesFor(ctx, index === plan.steps.length - 1, location),
-    usedReasons: before.map((s) => s.reason),
+    usedReasons: before.map((s) => s.reasonKey ?? s.reason),
     excludeIds: exclude,
   });
 

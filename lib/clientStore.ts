@@ -35,10 +35,16 @@ export type HistoryEntry = {
 
 export type RecentPlan = {
   id: string;
+  /** Text zum Zeitpunkt des Starts – Rückfall für ältere Einträge. */
   title: string;
   summary: string;
   startISO: string;
   emojis: string[];
+  /** Daten, aus denen Titel und Zusammenfassung in jeder Sprache entstehen. */
+  titleKey?: 'plan' | 'tour';
+  titleParams?: Record<string, string>;
+  stops?: number;
+  durationMin?: number;
 };
 
 function read<T>(key: string, fallback: T): T {
@@ -141,6 +147,13 @@ export function recordPlanStarted(plan: Plan) {
     summary: plan.summary,
     startISO: plan.startISO,
     emojis: plan.steps.map((s) => s.place.emoji),
+    titleKey: plan.titleKey,
+    titleParams: plan.titleParams,
+    stops:
+      plan.mode === 'tour'
+        ? plan.steps.filter((s) => s.place.themes?.length).length
+        : plan.steps.length,
+    durationMin: plan.totalDurationMin,
   };
   write(KEYS.recentPlans, [recent, ...recents.filter((r) => r.id !== plan.id)].slice(0, 8));
 }

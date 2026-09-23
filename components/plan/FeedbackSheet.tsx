@@ -1,16 +1,17 @@
 'use client';
 
+import { useLocale } from '@/components/LocaleProvider';
 import { useState } from 'react';
 import { Sheet } from '@/components/ui/Sheet';
 import { Chip } from '@/components/ui/Chip';
 import { recordFeedback, type FeedbackReason } from '@/lib/clientStore';
 import type { Plan } from '@/types/domain';
 
-const REASONS: Array<{ value: FeedbackReason; emoji: string; label: string }> = [
-  { value: 'price', emoji: '💰', label: 'Zu teuer' },
-  { value: 'distance', emoji: '📍', label: 'Zu weit' },
-  { value: 'atmosphere', emoji: '❤️', label: 'Atmosphäre' },
-  { value: 'quality', emoji: '⭐', label: 'Qualität' },
+const REASONS: Array<{ value: FeedbackReason; emoji: string }> = [
+  { value: 'price', emoji: '💰' },
+  { value: 'distance', emoji: '📍' },
+  { value: 'atmosphere', emoji: '❤️' },
+  { value: 'quality', emoji: '⭐' },
 ];
 
 type Props = {
@@ -24,6 +25,7 @@ type Props = {
  * Beides landet nur lokal und steuert die nächsten Vorschläge.
  */
 export function FeedbackSheet({ plan, open, onClose }: Props) {
+  const { t } = useLocale();
   const [verdict, setVerdict] = useState<'up' | 'down' | null>(null);
   const [done, setDone] = useState(false);
 
@@ -40,16 +42,16 @@ export function FeedbackSheet({ plan, open, onClose }: Props) {
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title="Wie war's?">
+    <Sheet open={open} onClose={onClose} title={t.feedback.title}>
       {done ? (
-        <p className="py-6 text-center text-[1rem] font-semibold">Danke – merke ich mir. 👍</p>
+        <p className="py-6 text-center text-[1rem] font-semibold">{t.feedback.thanks}</p>
       ) : verdict === null ? (
         <div className="flex gap-3 py-2">
           <button
             type="button"
             onClick={() => submit('up')}
             className="tap flex-1 rounded-3xl bg-mint-100 py-7 text-3xl"
-            aria-label="Gut"
+            aria-label={t.feedback.good}
           >
             👍
           </button>
@@ -57,14 +59,14 @@ export function FeedbackSheet({ plan, open, onClose }: Props) {
             type="button"
             onClick={() => setVerdict('down')}
             className="tap flex-1 rounded-3xl bg-canvas-sunk py-7 text-3xl"
-            aria-label="Nicht gut"
+            aria-label={t.feedback.bad}
           >
             👎
           </button>
         </div>
       ) : (
         <div className="space-y-3 py-1">
-          <p className="text-[0.9rem] text-ink-muted">Woran lag's?</p>
+          <p className="text-[0.9rem] text-ink-muted">{t.feedback.why}</p>
           <div className="flex flex-wrap gap-2">
             {REASONS.map((reason) => (
               <Chip
@@ -72,11 +74,11 @@ export function FeedbackSheet({ plan, open, onClose }: Props) {
                 emoji={reason.emoji}
                 onClick={() => submit('down', reason.value)}
               >
-                {reason.label}
+                {t.feedback.reasons[reason.value]}
               </Chip>
             ))}
             <Chip tone="soft" onClick={() => submit('down')}>
-              Sag ich nicht
+              {t.feedback.skip}
             </Chip>
           </div>
         </div>

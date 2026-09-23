@@ -1,5 +1,7 @@
 'use client';
 
+import { useLocale } from '@/components/LocaleProvider';
+import { kind, planTitle } from '@/lib/i18n/format';
 import { useEffect, useState } from 'react';
 import { Sheet } from '@/components/ui/Sheet';
 import { Button } from '@/components/ui/Button';
@@ -13,6 +15,8 @@ type Props = {
 
 /** Teilen ohne Hürde: ein Link, den jeder ohne Anmeldung öffnen kann. */
 export function ShareSheet({ plan, open, onClose }: Props) {
+  const { t, locale } = useLocale();
+  const titel = planTitle(t, plan);
   const [url, setUrl] = useState('');
   const [copied, setCopied] = useState(false);
   const [canUseNative, setCanUseNative] = useState(false);
@@ -23,7 +27,7 @@ export function ShareSheet({ plan, open, onClose }: Props) {
     setCanUseNative(typeof navigator.share === 'function');
   }, [plan.id]);
 
-  const message = `${plan.title}: ${plan.steps.map((s) => `${s.place.emoji} ${s.place.kind}`).join(' → ')}`;
+  const message = `${titel}: ${plan.steps.map((s) => `${s.place.emoji} ${kind(t, s.place.kind)}`).join(' → ')}`;
   const encoded = encodeURIComponent(`${message}\n${url}`);
 
   const channels = [
@@ -35,9 +39,9 @@ export function ShareSheet({ plan, open, onClose }: Props) {
     },
     { label: 'SMS', emoji: '📱', href: `sms:?&body=${encoded}` },
     {
-      label: 'E-Mail',
+      label: t.share.email,
       emoji: '✉️',
-      href: `mailto:?subject=${encodeURIComponent(plan.title)}&body=${encoded}`,
+      href: `mailto:?subject=${encodeURIComponent(titel)}&body=${encoded}`,
     },
   ];
 
@@ -52,10 +56,8 @@ export function ShareSheet({ plan, open, onClose }: Props) {
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title="Plan teilen">
-      <p className="mb-4 text-[0.88rem] text-ink-muted">
-        Wer den Link öffnet, sieht den Plan sofort – ganz ohne Anmeldung.
-      </p>
+    <Sheet open={open} onClose={onClose} title={t.share.title}>
+      <p className="mb-4 text-[0.88rem] text-ink-muted">{t.share.intro}</p>
 
       {canUseNative ? (
         <Button
@@ -63,11 +65,11 @@ export function ShareSheet({ plan, open, onClose }: Props) {
           size="lg"
           className="mb-3"
           onClick={() => {
-            void navigator.share({ title: plan.title, text: message, url });
+            void navigator.share({ title: titel, text: message, url });
           }}
           icon={<span aria-hidden>↗</span>}
         >
-          Teilen
+          {t.common.share}
         </Button>
       ) : null}
 
@@ -95,21 +97,21 @@ export function ShareSheet({ plan, open, onClose }: Props) {
       >
         <span className="min-w-0 flex-1 truncate text-[0.82rem] text-ink-muted">{url}</span>
         <span className="shrink-0 text-[0.82rem] font-semibold text-brand-600">
-          {copied ? 'Kopiert' : 'Kopieren'}
+          {copied ? t.common.copied : t.common.copy}
         </span>
       </button>
 
       {plan.expiresAtISO ? (
         <p className="mt-4 text-[0.76rem] leading-relaxed text-ink-faint">
-          Der Link funktioniert bis{' '}
-          {new Date(plan.expiresAtISO).toLocaleString('de', {
-            weekday: 'short',
-            day: '2-digit',
-            month: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-          })}{' '}
-          Uhr.
+          {t.share.validUntil(
+            new Date(plan.expiresAtISO).toLocaleString(locale, {
+              weekday: 'short',
+              day: '2-digit',
+              month: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          )}
         </p>
       ) : null}
     </Sheet>

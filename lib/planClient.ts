@@ -1,6 +1,7 @@
 'use client';
 
 import { loadPreferences } from '@/lib/clientStore';
+import { currentLocale } from '@/lib/i18n';
 import type { Category, Mobility, Mood, Party, Plan, SightTheme, TourTweak } from '@/types/domain';
 
 export type PlanRequestInput = {
@@ -38,7 +39,9 @@ export type PlanResponse = {
   variants?: Plan[];
   understood?: string[];
   usesMockPlaces?: boolean;
+  /** Fehlercode – die Oberfläche übersetzt ihn. */
   error?: string;
+  params?: Record<string, string | number>;
   message?: string;
 };
 
@@ -95,12 +98,12 @@ export async function requestPlanStreamed(
           const r = JSON.parse(daten);
           ergebnis = r.ok
             ? { plan: r.plan, variants: r.variants, understood: r.understood }
-            : { error: r.error, message: r.message, understood: r.understood };
+            : { error: r.error, params: r.params, message: r.message, understood: r.understood };
         }
       }
     }
 
-    return ergebnis ?? { error: 'Die Planung wurde unterbrochen.' };
+    return ergebnis ?? { error: 'interrupted' };
   } catch {
     return requestPlan(input);
   }
@@ -115,7 +118,8 @@ function bodyFor(
     // Der Server läuft auf UTC; ohne diese Angabe wüsste er nicht, welche
     // Uhrzeit „bis 22 Uhr" beim Nutzer meint.
     tzOffsetMin: -new Date().getTimezoneOffset(),
-    language: preferences.language,
+    // Die Sprache, die gerade angezeigt wird – nicht die gespeicherte Vorliebe.
+    language: currentLocale(),
     age: preferences.age,
     homeLat: preferences.homeLocation?.lat,
     homeLon: preferences.homeLocation?.lon,
@@ -138,11 +142,11 @@ export async function requestPlan(input: PlanRequestInput): Promise<PlanResponse
 
     const data = (await res.json()) as PlanResponse;
     if (!res.ok) {
-      return { error: data.error ?? 'Die Planung ist fehlgeschlagen.' };
+      return { error: data.error ?? 'failed', params: data.params, message: data.message };
     }
     return data;
   } catch {
-    return { error: 'Keine Verbindung. Versuch es gleich nochmal.' };
+    return { error: 'offline' };
   }
 }
 
@@ -155,11 +159,11 @@ export async function replacePlanStep(
     const res = await fetch(`/api/plan/${planId}/replace`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stepId, hint, preferences: loadPreferences() }),
+      body: JSON.stringify({ stepId, hint, preferences: loadPreferences(), language: currentLocale() }),
     });
     return (await res.json()) as { plan?: Plan; error?: string; message?: string };
   } catch {
-    return { error: 'Keine Verbindung.' };
+    return { error: 'offline' };
   }
 }
 
@@ -176,11 +180,11 @@ export async function retimePlan(
     const res = await fetch(`/api/plan/${planId}/retime`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ startLocal, homeByLocal, preferences: loadPreferences() }),
+      body: JSON.stringify({ startLocal, homeByLocal, preferences: loadPreferences(), language: currentLocale() }),
     });
     return (await res.json()) as { plan?: Plan; error?: string; message?: string };
   } catch {
-    return { error: 'Keine Verbindung.' };
+    return { error: 'offline' };
   }
 }
 
