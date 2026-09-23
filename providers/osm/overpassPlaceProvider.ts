@@ -106,6 +106,19 @@ const MIRROR_TIMEOUT_MS = 8000;
 const INTERACTIVE_BUDGET_MS = 11_000;
 
 /**
+ * So lange wird eine gescheiterte Abfrage nicht wiederholt. Kurz genug, dass
+ * sich eine Gegend nach einer Überlastphase von selbst erholt.
+ */
+const FEHLER_PAUSE_MS = 3 * 60_000;
+
+/**
+ * Beim Vorladen wird nicht gleich der größte Ring geholt: Auf dem Land kostet
+ * er am meisten und wird am seltensten gebraucht. Er kommt erst, wenn ein
+ * Klick wirklich so weit hinausschaut.
+ */
+const PREFETCH_RADIUS_M = 2400;
+
+/**
  * Echte Orte aus OpenStreetMap über die Overpass-API.
  *
  * Was von hier kommt, ist echt: Name, Position, Art des Ortes und – wenn
@@ -128,6 +141,14 @@ export class OverpassPlaceProvider implements PlaceProvider {
 
   /** Nur prozesslokal: verhindert doppelte Abfragen derselben Kachel. */
   private inflight = new Map<string, Promise<Place[]>>();
+
+  /**
+   * Kürzlich gescheiterte Abfragen. Die öffentlichen Instanzen antworten bei
+   * Überlast mit 504 – erst nach allen Versuchen und Ausweichservern, also
+   * nach gut einer halben Minute. Ohne dieses Gedächtnis liefe jeder weitere
+   * Aufruf derselben Gegend erneut in dieselbe halbe Minute.
+   */
+  private gescheitert = new Map<string, number>();
 
   async search(query: PlaceQuery): Promise<Place[]> {
     const theme = query.theme ?? 'places';
@@ -233,7 +254,7 @@ export class OverpassPlaceProvider implements PlaceProvider {
     theme: Theme = 'places',
   ): Promise<void> {
     try {
-      await this.sammeln(center, MAX_RADIUS_M, theme, Number.POSITIVE_INFINITY);
+      await this.sammeln(center, PREFETCH_RADIUS_M, theme, Number.POSITIVE_INFINITY);
     } catch {
       /* Vorladen darf scheitern, ohne dass jemand es merkt. */
     }
@@ -281,13 +302,28 @@ export class OverpassPlaceProvider implements PlaceProvider {
     const cell = `${CACHE_VERSION}:${Math.round(radius)}:${cellLat.toFixed(3)}:${cellLon.toFixed(3)}`;
     const key = theme === 'sights' ? `sights:${cell}` : cell;
 
+    // Kürzlich gescheitert? Dann nicht erneut minutenlang warten.
+    const letzterFehler = this.gescheitert.get(key);
+    if (letzterFehler !== undefined && Date.now() - letzterFehler < FEHLER_PAUSE_MS) {
+      return Promise.reject(new OverpassUnavailableError(`${key}: kürzlich gescheitert`));
+    }
+
     // Parallele Anfragen auf dieselbe Zelle teilen sich einen Vorgang.
     const running = this.inflight.get(key);
     if (running) return running;
 
-    const request = this.loadCell(key, cellLat, cellLon, theme, radius).finally(() => {
-      this.inflight.delete(key);
-    });
+    const request = this.loadCell(key, cellLat, cellLon, theme, radius)
+      .then((places) => {
+        this.gescheitert.delete(key);
+        return places;
+      })
+      .catch((error: unknown) => {
+        this.gescheitert.set(key, Date.now());
+        throw error;
+      })
+      .finally(() => {
+        this.inflight.delete(key);
+      });
 
     this.inflight.set(key, request);
     // Wenn der Aufrufer wegen Zeitbudget aussteigt, darf die Ablehnung
