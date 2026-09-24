@@ -96,10 +96,26 @@ export class FallbackPlanStore implements PlanStore {
  * Benutzer der Verbindung; die gehören nicht in eine öffentliche Antwort.
  */
 function einordnen(error: unknown): string {
-  const text = error instanceof Error ? error.message : String(error);
-  if (/authentication|password/i.test(text)) return 'Anmeldedaten werden abgelehnt';
+  const text = [
+    error instanceof Error ? error.message : String(error),
+    error instanceof Error && error.cause instanceof Error ? error.cause.message : '',
+  ].join(' ');
+
+  if (/authentication|password|credentials/i.test(text)) return 'Anmeldedaten werden abgelehnt';
   if (/Can't reach|ECONNREFUSED|ENOTFOUND/i.test(text)) return 'Server nicht erreichbar';
   if (/Timed out|ETIMEDOUT/i.test(text)) return 'Zeitüberschreitung';
-  if (/does not exist|relation/i.test(text)) return 'Tabelle fehlt';
-  return error instanceof Error ? error.name : 'unbekannt';
+  if (/does not exist|relation .* does not exist/i.test(text)) return 'Tabelle fehlt';
+  if (/query engine|binary|libssl|engine.*not found/i.test(text)) return 'Prisma-Engine fehlt';
+  if (/environment variable|DATABASE_URL|invalid .*url|protocol/i.test(text)) {
+    return 'Verbindungszeichenfolge unbrauchbar';
+  }
+
+  // Nichts erkannt: eine bereinigte Kurzfassung, damit die Suche weitergeht.
+  // Alles in Backticks (Host, Benutzer, Datenbank) und jede URL fliegen raus.
+  const bereinigt = text
+    .replace(/`[^`]*`/g, '…')
+    .replace(/[a-z]+:\/\/\S+/gi, '…')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return `${error instanceof Error ? error.name : 'Fehler'}: ${bereinigt.slice(0, 120)}`;
 }
