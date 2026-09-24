@@ -139,6 +139,8 @@ export type ParsedIntent = {
   budgetTotal?: number;
   /** Ausdrücklicher Essenswunsch aus dem Freitext. */
   wantsFood?: boolean;
+  /** "Nur eine Sache" – ein Programmpunkt statt eines ganzen Abends. */
+  singleActivity?: boolean;
   availableMinutes?: number;
   moods: import('@/types/domain').Mood[];
   mobility?: Mobility;

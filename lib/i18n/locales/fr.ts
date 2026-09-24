@@ -503,6 +503,7 @@ export const fr: Dictionary = {
     budget: (amount) => `budget ${amount} €`,
     cheap: 'pas cher',
     budgetAny: 'budget libre',
+    single: 'une seule chose',
     budgetTotal: (amount) => `${amount} € au total`,
     noFood: 'sans repas',
     hoursRange: (a, b) => `${a}–${b} heures`,

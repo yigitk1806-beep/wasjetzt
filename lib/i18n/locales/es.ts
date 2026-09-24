@@ -505,6 +505,7 @@ export const es: Dictionary = {
     budget: (amount) => `presupuesto ${amount} €`,
     cheap: 'barato',
     budgetAny: 'presupuesto libre',
+    single: 'solo una cosa',
     budgetTotal: (amount) => `${amount} € en total`,
     noFood: 'sin comida',
     hoursRange: (a, b) => `${a}–${b} horas`,

@@ -14,9 +14,17 @@ export type OsmTags = Record<string, string>;
  * als Tippfehler. Solche Treffer sollen gar nicht erst im Plan landen.
  */
 function istInfrastruktur(tags: OsmTags): boolean {
+  // Wege und Verkehr: `highway` deckt cycleway, footway, path, pedestrian,
+  // residential, service und bus_stop mit ab – all das ist Untergrund fürs
+  // Routing, aber niemals ein Vorschlag für den Abend.
   if (tags.highway || tags.railway || tags.public_transport || tags.aeroway) return true;
+  // Relationen wie Rad- und Wanderrouten oder Buslinien.
+  if (tags.route) return true;
   if (tags.amenity === 'parking' || tags.amenity === 'bicycle_parking') return true;
-  if (tags.man_made === 'street_cabinet' || tags.barrier) return true;
+  if (tags.amenity === 'bus_station' || tags.amenity === 'taxi') return true;
+  // Leitungen, Masten, Gewässerbauwerke, Schranken, Zäune.
+  if (tags.power || tags.waterway || tags.barrier) return true;
+  if (tags.man_made && tags.man_made !== 'tower') return true;
   // Reine Gebäude ohne eigene Nutzung.
   if (tags.building && !tags.amenity && !tags.leisure && !tags.tourism && !tags.shop) return true;
   return false;

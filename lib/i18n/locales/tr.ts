@@ -496,6 +496,7 @@ export const tr: Dictionary = {
     budget: (amount) => `bütçe ${amount} €`,
     cheap: 'ucuz',
     budgetAny: 'bütçe fark etmez',
+    single: 'sadece tek bir şey',
     budgetTotal: (amount) => `toplam ${amount} €`,
     noFood: 'yemeksiz',
     hoursRange: (a, b) => `${a}–${b} saat`,

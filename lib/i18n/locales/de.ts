@@ -531,6 +531,7 @@ export const de = {
     budget: (amount: number) => `Budget ${amount} €`,
     cheap: 'günstig',
     budgetAny: 'Budget egal',
+    single: 'nur eine Sache',
     budgetTotal: (amount: number) => `${amount} € gesamt`,
     noFood: 'ohne Essen',
     hoursRange: (a: number, b: number) => `${a}–${b} Stunden`,

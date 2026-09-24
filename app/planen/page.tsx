@@ -142,6 +142,7 @@ export default function BuildPlanPage() {
       setBudgetFree(intent.budgetTotal === 0);
     }
     if (typeof intent.wantsFood === 'boolean') setWantsFood(intent.wantsFood);
+    if (intent.singleActivity === true) setSingleActivity(true);
     if (typeof intent.availableMinutes === 'number') {
       setMinutes(intent.availableMinutes);
       setMinutesTouched(true);

@@ -104,6 +104,15 @@ const RULES: Rule[] = [
     label: (m) => ({ key: 'people', args: [toNumber(m[1]) ?? 0] }),
   },
 
+  // ---- Umfang ---------------------------------------------------------
+  {
+    test: /\b(nur eine sache|nur eine aktivität|nur eine aktivitaet|nur etwas kleines|nur kurz etwas|just one thing|only one thing)\b/i,
+    apply: (i) => {
+      i.singleActivity = true;
+    },
+    label: { key: 'single' },
+  },
+
   // ---- Essen ----------------------------------------------------------
   {
     test: /\b(essen gehen|abendessen|mittagessen|dinner|lunch|etwas essen|was essen|essen|restaurant|dine)\b/i,

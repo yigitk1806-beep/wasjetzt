@@ -206,12 +206,14 @@ export function buildSlots(ctx: PlanContext): Slot[] {
 
   const slots: Slot[] = [];
 
-  // Reihenfolge nach Tageszeit: Morgens beginnt man nicht mit dem Abendessen.
+  // Reihenfolge: erst die Unternehmung, dann das Essen, dann der Ausklang.
   //
-  // Ausnahme: Wer ausdrücklich „Kino“ will, bekommt zuerst das Kino. Ein
-  // nur vermutetes Essen darf den echten Wunsch nicht auffressen – sonst ist
-  // die Zeit weg, bevor der Film überhaupt geprüft wurde.
-  const wunschZuerst = !intent.foodExplicit && (intent.wish !== undefined || intent.experience);
+  // Wer Action und Essen will, geht erst bowlen und danach essen – nicht
+  // umgekehrt. Das gilt auch für einen ausdrücklich angetippten Wunsch:
+  // Ein Essen, das nur die Uhrzeit nahelegt, darf ihm nicht die Zeit wegnehmen.
+  // Reines Essen ohne Unternehmung bleibt vorn, und morgens beginnt niemand
+  // mit dem Abendessen.
+  const wunschZuerst = intent.experience || intent.wish !== undefined;
 
   if (ctx.dayPart === 'morning' || wunschZuerst) {
     slots.push(hauptSlot);
