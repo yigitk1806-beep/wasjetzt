@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
-import { PeopleField } from '@/components/build/PeopleField';
+import { PeopleField } from '@/components/ui/PeopleField';
 import { PlanningOverlay } from '@/components/PlanningOverlay';
 import { ArrowRight } from '@/components/ui/icons';
 import {

@@ -1,7 +1,9 @@
 node_modules/
 .next/
-out/
-build/
+# Nur die Bauordner im Projektstamm – ohne fuehrenden Schraegstrich
+# verschluckt "build/" auch Quellordner wie components/build/.
+/out/
+/build/
 .env
 .env.local
 .env.*.local
