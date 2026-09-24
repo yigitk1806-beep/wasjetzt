@@ -34,6 +34,16 @@ const TIMEOUTS_MS = [4000, 7000];
 const FEHLER_BIS_PAUSE = 3;
 const PAUSE_MS = 90_000;
 
+/**
+ * Wie viele Anfragen gleichzeitig hinausgehen dürfen.
+ *
+ * Eine Tour hat sieben Teilstrecken. Werden die alle auf einmal abgefragt,
+ * beantwortet die öffentliche Instanz die ersten beiden und lässt den Rest
+ * ins Zeitlimit laufen – gemessen: Strecke 1 und 2 echt, 3 bis 7 geschätzt.
+ * Nacheinander dauert dasselbe keine halbe Sekunde und liefert alles echt.
+ */
+const MAX_PARALLEL = 2;
+
 type OsrmResponse = {
   code: string;
   routes?: Array<{ distance: number; duration: number; geometry?: string }>;
@@ -56,6 +66,9 @@ export class OsrmRoutingProvider implements RoutingProvider {
   /** Fehlschläge in Folge und, falls die Pause läuft, ihr Ende. */
   private fehler = 0;
   private pauseBis = 0;
+  /** Einfache Schleuse: höchstens MAX_PARALLEL Anfragen unterwegs. */
+  private aktive = 0;
+  private warteschlange: Array<() => void> = [];
 
   async route(query: RouteQuery): Promise<TravelLeg> {
     const profile = PROFILE[query.mode];
@@ -74,12 +87,26 @@ export class OsrmRoutingProvider implements RoutingProvider {
     const running = this.inflight.get(key);
     if (running) return running;
 
-    const request = this.fetchRoute(query, profile, key).finally(() => {
+    const request = this.schleuse(() => this.fetchRoute(query, profile, key)).finally(() => {
       this.inflight.delete(key);
     });
     this.inflight.set(key, request);
     void request.catch(() => undefined);
     return request;
+  }
+
+  /** Lässt nur MAX_PARALLEL Anfragen gleichzeitig hinaus. */
+  private async schleuse<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.aktive >= MAX_PARALLEL) {
+      await new Promise<void>((frei) => this.warteschlange.push(frei));
+    }
+    this.aktive += 1;
+    try {
+      return await fn();
+    } finally {
+      this.aktive -= 1;
+      this.warteschlange.shift()?.();
+    }
   }
 
   private async fetchRoute(
