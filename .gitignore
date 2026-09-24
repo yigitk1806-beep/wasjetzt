@@ -6,6 +6,7 @@ node_modules/
 /build/
 .env
 .env.local
+infra/**/.env
 .env.*.local
 *.tsbuildinfo
 next-env.d.ts

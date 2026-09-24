@@ -1,0 +1,71 @@
+# Eigene Overpass-Instanz für WasJetzt.
+#
+# Warum: Die öffentlichen Instanzen sind gespendete Infrastruktur. Unter Last
+# antworten sie spät oder gar nicht, und WasJetzt fällt dann auf Schätzungen
+# zurück. Eine eigene Instanz ist der einzige Weg, das zuverlässig zu lösen.
+#
+# Das Abbild `wiktorn/overpass-api` bringt den Import mit: Beim ersten Start
+# lädt es den unter OVERPASS_PLANET_URL angegebenen Auszug und baut daraus die
+# Datenbank. Das dauert einmalig (Berlin: grob 20–40 Minuten, siehe
+# docs/overpass.md) und passiert danach nie wieder – das Datenverzeichnis ist
+# ein benanntes Volume.
+#
+# Start:   docker compose -f infra/overpass/docker-compose.yml up -d
+# Logs:    docker compose -f infra/overpass/docker-compose.yml logs -f overpass
+# Status:  curl "http://localhost:12345/api/status"
+
+services:
+  overpass:
+    image: wiktorn/overpass-api:latest
+    container_name: wasjetzt-overpass
+    restart: unless-stopped
+    ports:
+      # Nur auf localhost binden. Nach außen gehört ein Reverse Proxy mit
+      # HTTPS davor – siehe docs/overpass.md, Abschnitt "Betrieb".
+      - '127.0.0.1:${OVERPASS_PORT:-12345}:80'
+    environment:
+      # ---- Welche Daten importiert werden -----------------------------
+      # Geofabrik-Auszug. Standard ist Berlin; für eine andere Region nur
+      # diese beiden Zeilen ändern und das Volume neu anlegen.
+      OVERPASS_MODE: ${OVERPASS_MODE:-init}
+      OVERPASS_PLANET_URL: ${OVERPASS_PLANET_URL:-https://download.geofabrik.de/europe/germany/berlin-latest.osm.bz2}
+
+      # ---- Aktualisierung ---------------------------------------------
+      # Minütliche Änderungsdateien derselben Region. `OVERPASS_DIFF_URL`
+      # bleibt leer, solange keine Aktualisierung gewünscht ist – dann
+      # bleibt der Datenstand auf dem Importzeitpunkt stehen.
+      OVERPASS_DIFF_URL: ${OVERPASS_DIFF_URL:-}
+      OVERPASS_UPDATE_SLEEP: ${OVERPASS_UPDATE_SLEEP:-3600}
+      OVERPASS_RULES_LOAD: ${OVERPASS_RULES_LOAD:-10}
+
+      # ---- Grenzen -----------------------------------------------------
+      # Ohne Obergrenze kann eine einzelne Abfrage den Dienst blockieren.
+      OVERPASS_MAX_TIMEOUT: ${OVERPASS_MAX_TIMEOUT:-60}
+      OVERPASS_SPACE: ${OVERPASS_SPACE:-2147483648}
+      OVERPASS_META: ${OVERPASS_META:-no}
+
+    volumes:
+      # Benanntes Volume: Der Import überlebt Neustarts und Updates des
+      # Abbilds. Löschen heißt neu importieren.
+      - overpass-db:/db
+
+    healthcheck:
+      # `/api/status` antwortet auch während des Imports noch nicht – der
+      # Container gilt deshalb erst als gesund, wenn die Datenbank steht.
+      test: ['CMD-SHELL', 'wget -q -O- http://localhost/api/status || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # Großzügig: Der Erstimport darf so lange dauern, wie er braucht.
+      start_period: 60m
+
+    # Der Import ist speicherhungrig. Für Berlin reichen 2 GB; größere
+    # Regionen brauchen mehr (siehe docs/overpass.md).
+    deploy:
+      resources:
+        limits:
+          memory: ${OVERPASS_MEMORY_LIMIT:-4g}
+
+volumes:
+  overpass-db:
+    name: wasjetzt-overpass-db

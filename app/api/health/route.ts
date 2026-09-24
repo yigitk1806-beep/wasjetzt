@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getPlanStore, isPersistent } from '@/db/planStore';
 import { PrismaPlaceCache } from '@/db/prismaPlaceCache';
 import { getProviders } from '@/providers/registry';
+import { probeOverpass } from '@/providers/osm/overpassEndpoints';
 import { shortId } from '@/lib/id';
 import type { Plan } from '@/types/domain';
 
@@ -26,6 +27,13 @@ export async function GET(request: Request) {
     // ob ein Deployment schon durch ist.
     version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'lokal',
   };
+
+  // Optional: Welche Overpass-Ziele antworten von hier aus? Ohne das ist
+  // nicht zu erkennen, ob die eigene Instanz traegt oder ob jede Anfrage
+  // still auf die oeffentliche ausweicht.
+  if (new URL(request.url).searchParams.get('overpass') === '1') {
+    checks.overpass = await probeOverpass();
+  }
 
   // Optional: Erreicht diese Instanz den Routing-Dienst? Nur auf Anfrage,
   // damit die Gesundheitspruefung selbst schnell bleibt. Ohne diesen Test

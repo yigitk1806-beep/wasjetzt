@@ -5,6 +5,7 @@ import type { PlaceProvider, PlaceQuery } from '@/providers/types';
 import type { Place, PriceInfo, PriceLevel } from '@/types/domain';
 import { parseOpeningHours } from './openingHours';
 import { buildOverpassQuery, classify, type OsmTags } from './taxonomy';
+import { hostVon, overpassZiele, type OverpassZiel } from './overpassEndpoints';
 import { buildSightsQuery, classifySight, isNotable, sightProfile, themesFor } from './sights';
 
 type OverpassElement = {
@@ -21,15 +22,6 @@ type OverpassResponse = { elements?: OverpassElement[] };
 /** Welche Art von Orten geladen wird – bestimmt Abfrage und Cache-Schlüssel. */
 type Theme = 'places' | 'sights';
 
-/**
- * Öffentliche Overpass-Instanzen. Sie werden der Reihe nach probiert –
- * die Endpunkte sind gespendete Infrastruktur und zeitweise überlastet.
- */
-const ENDPOINTS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
-];
 
 /**
  * Suchradius gegen Overpass. Größere Mobilitätsradien (Auto: 16 km) werden
@@ -88,8 +80,6 @@ const ZELLE_WEIT = 0.02;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Erster Endpunkt bekommt mehr Zeit; die Ersatzinstanzen sollen nicht bremsen. */
-const PRIMARY_TIMEOUT_MS = 25_000;
-const MIRROR_TIMEOUT_MS = 8000;
 
 /**
  * So lange darf eine *interaktive* Anfrage höchstens auf Overpass warten.
@@ -364,15 +354,26 @@ export class OverpassPlaceProvider implements PlaceProvider {
         : buildOverpassQuery(lat, lon, radius);
     const toModel = theme === 'sights' ? toSight : toPlace;
     let lastError: unknown = null;
+    const begonnen = Date.now();
 
-    // Der Hauptserver wird bei Überlast (429/504) ein zweites Mal versucht,
-    // bevor die Ausweichserver dran sind. Pro Nutzer sind dort nur zwei
-    // gleichzeitige Abfragen erlaubt – eine kurze Pause reicht oft.
-    const versuche = [ENDPOINTS[0], ENDPOINTS[0], ...ENDPOINTS.slice(1)];
-    for (const [index, endpoint] of versuche.entries()) {
-      if (index === 1) await new Promise((r) => setTimeout(r, 1500));
+    // Die Ziele kommen aus der Umgebung: erst die eigene Instanz, falls
+    // konfiguriert, dann die öffentlichen. Ein Ziel, das bei Überlast einen
+    // zweiten Versuch verdient, steht zweimal in der Liste.
+    const versuche: OverpassZiel[] = [];
+    for (const ziel of overpassZiele()) {
+      versuche.push(ziel);
+      if (ziel.wiederholen) versuche.push(ziel);
+    }
+
+    for (const [index, ziel] of versuche.entries()) {
+      const wiederholung = index > 0 && versuche[index - 1].url === ziel.url;
+      // Pro Nutzer sind auf den öffentlichen Instanzen nur zwei gleichzeitige
+      // Abfragen erlaubt – eine kurze Pause reicht oft.
+      if (wiederholung) await new Promise((r) => setTimeout(r, 1500));
+
+      const start = Date.now();
       try {
-        const res = await fetch(endpoint, {
+        const res = await fetch(ziel.url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -380,16 +381,17 @@ export class OverpassPlaceProvider implements PlaceProvider {
             'User-Agent': 'WasJetzt/0.1 (Freizeitplaner; +https://wasjetzt.app)',
           },
           body: `data=${encodeURIComponent(query)}`,
-          signal: AbortSignal.timeout(index <= 1 ? PRIMARY_TIMEOUT_MS : MIRROR_TIMEOUT_MS),
+          signal: AbortSignal.timeout(ziel.timeoutMs),
         });
 
         if (!res.ok) {
           // Nur Überlast ist einen zweiten Versuch am selben Server wert.
-          if (index === 0 && res.status !== 429 && res.status !== 504) {
-            lastError = new Error(`${endpoint} → ${res.status}`);
+          if (ziel.wiederholen && !wiederholung && res.status !== 429 && res.status !== 504) {
+            lastError = new Error(`${hostVon(ziel.url)} → ${res.status}`);
+            protokoll(ziel, index, 'fehler', Date.now() - start, `HTTP ${res.status}`);
             continue;
           }
-          throw new Error(`${endpoint} → ${res.status}`);
+          throw new Error(`${hostVon(ziel.url)} → ${res.status}`);
         }
 
         const json = (await res.json()) as OverpassResponse;
@@ -397,9 +399,12 @@ export class OverpassPlaceProvider implements PlaceProvider {
           .map((element) => toModel(element))
           .filter((place): place is Place => place !== null);
 
+        protokoll(ziel, index, 'ok', Date.now() - start, `${places.length} Orte`, Date.now() - begonnen);
         return dedupe(places);
       } catch (error) {
         lastError = error;
+        const abgelaufen = error instanceof Error && error.name === 'TimeoutError';
+        protokoll(ziel, index, abgelaufen ? 'zeitüberschreitung' : 'fehler', Date.now() - start);
       }
     }
 
@@ -409,6 +414,33 @@ export class OverpassPlaceProvider implements PlaceProvider {
     // ausgewichen werden.
     throw new OverpassUnavailableError(String(lastError));
   }
+}
+
+/**
+ * Eine Zeile je Versuch. Sichtbar sind Art, Host und Dauer – keine
+ * Nutzerdaten, keine Koordinaten, keine Abfrage.
+ *
+ * Ohne dieses Protokoll ist von außen nicht zu erkennen, ob die eigene
+ * Instanz trägt oder ob jede Anfrage still auf die öffentliche ausweicht.
+ */
+function protokoll(
+  ziel: OverpassZiel,
+  index: number,
+  ergebnis: 'ok' | 'fehler' | 'zeitüberschreitung',
+  ms: number,
+  detail?: string,
+  gesamtMs?: number,
+) {
+  const rolle = index === 0 ? 'primär' : 'ausweich';
+  const teile = [
+    `[overpass] ${rolle}/${ziel.art} ${hostVon(ziel.url)} ${ergebnis} ${ms}ms`,
+    detail,
+    gesamtMs !== undefined && gesamtMs !== ms ? `gesamt ${gesamtMs}ms` : undefined,
+  ].filter(Boolean);
+
+  const zeile = teile.join(' · ');
+  if (ergebnis === 'ok') console.info(zeile);
+  else console.warn(zeile);
 }
 
 export class OverpassUnavailableError extends Error {
