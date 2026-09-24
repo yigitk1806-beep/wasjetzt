@@ -121,10 +121,15 @@ export type OverpassZustand = {
 /**
  * Kurzer Erreichbarkeitstest je Ziel – für die Gesundheitsseite.
  *
- * Bewusst die kleinstmögliche Abfrage: Sie belastet auch die öffentlichen
- * Instanzen kaum und sagt trotzdem, ob dort ein Overpass antwortet.
+ * Bewusst die kleinstmögliche Abfrage: ein Häuserblock, ein Ergebnis.
+ *
+ * Trotzdem großzügig bemessen: Gemessen am 24.09.2026 brauchte
+ * overpass-api.de auch dafür 5,5 bis 7,5 Sekunden, und kurz
+ * aufeinanderfolgende Aufrufe wurden mit einer HTML-Seite abgewiesen. Der
+ * Test läuft deshalb nur auf Anfrage (`?overpass=1`) und sollte nicht im
+ * Minutentakt gegen fremde Instanzen laufen.
  */
-export async function probeOverpass(timeoutMs = 5000): Promise<OverpassZustand[]> {
+export async function probeOverpass(timeoutMs = 12_000): Promise<OverpassZustand[]> {
   // Ein Häuserblock, ein Ergebnis. `out count;` ohne Ausschnitt würde die
   // ganze Datenbank zählen – das belastet gespendete Server unnötig und
   // läuft dort regelmäßig ins Zeitlimit, ohne dass etwas kaputt wäre.

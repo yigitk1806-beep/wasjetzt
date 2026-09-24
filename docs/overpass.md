@@ -165,6 +165,12 @@ curl "https://wasjetzt-three.vercel.app/api/health?overpass=1"
 
 Zustände: `healthy`, `unhealthy` (antwortet, aber falsch), `timeout`.
 
+Der Test läuft nur auf Anfrage. Gegen die öffentlichen Instanzen sollte er
+nicht im Minutentakt laufen: Gemessen am 24.09.2026 brauchte overpass-api.de
+selbst für diese Ein-Element-Abfrage 5,5 bis 7,5 Sekunden, und kurz
+aufeinanderfolgende Aufrufe wurden abgewiesen. Sobald die eigene Instanz
+steht, ist regelmäßiges Prüfen dort unproblematisch.
+
 **Am Server:**
 
 ```bash
