@@ -1,5 +1,5 @@
 import { localHour } from '@/lib/time';
-import type { Category, PlanRequest } from '@/types/domain';
+import type { Category, PlanRequest, SequenceKind } from '@/types/domain';
 
 /**
  * Was die Leute heute gemeinsam erleben wollen – als Struktur, nicht als
@@ -32,7 +32,34 @@ export type PlanIntent = {
   nightcap: boolean;
   /** Ausdrücklich angetippte Kategorie; überstimmt alles andere. */
   wish?: Category;
+  /**
+   * Gewünschter Ablauf, falls der Nutzer einen genannt hat. Er ist eine
+   * harte Anforderung – die Engine sucht die Orte, nicht die Reihenfolge.
+   */
+  sequence?: SequenceKind[];
   groupSize: number;
+};
+
+/**
+ * Was der Nutzer sagt → welche Kategorien dafür in Frage kommen.
+ *
+ * „Action“ ist bewusst mehrere Kategorien: Bowling ist `activity`, die
+ * Spielhalle `gaming`, die Kletterhalle `sport` – für den Nutzer ist das
+ * alles dasselbe Versprechen.
+ */
+export const FOLGE_ROLLEN: Record<SequenceKind, Category[]> = {
+  food: ['food'],
+  cafe: ['cafe'],
+  bar: ['bar'],
+  action: ['activity', 'gaming', 'sport'],
+  cinema: ['cinema'],
+  culture: ['culture'],
+  nature: ['nature'],
+  shopping: ['shopping'],
+  wellness: ['wellness'],
+  gaming: ['gaming', 'activity'],
+  sport: ['sport', 'activity'],
+  event: ['event'],
 };
 
 /**
@@ -61,8 +88,12 @@ export function deriveIntent(request: PlanRequest, tzOffsetMin: number, start: D
 
   // Essen: Der ausdrückliche Schalter gewinnt. Ohne Angabe entscheidet die
   // Uhrzeit – aber nur, wenn überhaupt Zeit für mehr als eine Station ist.
+  const folge = request.sequence?.length ? request.sequence : undefined;
   const foodExplicit =
-    request.wantsFood === true || moods.has('food') || request.focusCategory === 'food';
+    request.wantsFood === true ||
+    moods.has('food') ||
+    request.focusCategory === 'food' ||
+    (folge?.includes('food') ?? false);
   const food =
     request.wantsFood ??
     (foodExplicit ||
@@ -70,7 +101,8 @@ export function deriveIntent(request: PlanRequest, tzOffsetMin: number, start: D
 
   const experience =
     request.moods.some((m) => ERLEBNIS_STIMMUNGEN.has(m)) ||
-    (wish !== undefined && ERLEBNIS_ROLLEN.includes(wish));
+    (wish !== undefined && ERLEBNIS_ROLLEN.includes(wish)) ||
+    (folge?.some((k) => k === 'action' || k === 'gaming' || k === 'sport') ?? false);
 
 
   const romantic = moods.has('date') || (request.party === 'partner' && !moods.has('party'));
@@ -83,14 +115,15 @@ export function deriveIntent(request: PlanRequest, tzOffsetMin: number, start: D
   const nightcap = erwachsen && (hour >= 17 || hour < 3) && !calm;
 
   return {
-    food,
-    foodExplicit: food && foodExplicit,
+    food: folge ? folge.includes('food') || food : food,
+    foodExplicit: folge ? folge.includes('food') : food && foodExplicit,
     experience,
     romantic,
     calm,
     outdoor,
     nightcap,
     wish,
+    sequence: folge,
     groupSize: request.groupSize,
   };
 }

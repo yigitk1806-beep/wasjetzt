@@ -27,7 +27,12 @@ import { recordPlanStarted, recordRejection } from '@/lib/clientStore';
 import { useLocale } from '@/components/LocaleProvider';
 import { useLocation } from '@/hooks/useLocation';
 import { errorText, noteText } from '@/lib/i18n/format';
-import { replacePlanStep, replanFrom, type PlanPhase } from '@/lib/planClient';
+import {
+  replacePlanStep,
+  replanFrom,
+  type PlanPhase,
+  type PlanRequestInput,
+} from '@/lib/planClient';
 import type { Plan, PlanStep } from '@/types/domain';
 
 type Props = { initialPlan: Plan };
@@ -48,6 +53,8 @@ export function PlanView({ initialPlan }: Props) {
   const [replanPhase, setReplanPhase] = useState<PlanPhase | null>(null);
   const [replanning, setReplanning] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  // Hinweise, die der Nutzer mit „So planen“ abgehakt hat.
+  const [verworfen, setVerworfen] = useState<string[]>([]);
   const { setManual, requestDevice } = useLocation();
 
   // Wetterwache: prüft beim Öffnen und danach alle 10 Minuten.
@@ -110,6 +117,35 @@ export function PlanView({ initialPlan }: Props) {
     recordPlanStarted(plan);
     setStarted(true);
   }
+
+  /** Plan neu bauen – mit einer gezielten Änderung an der Anfrage. */
+  const neuPlanen = useCallback(
+    async (extra: Partial<PlanRequestInput>) => {
+      setReplanning(true);
+      setReplanPhase(null);
+      setStartError(null);
+
+      const response = await replanFrom(
+        plan,
+        {
+          label: plan.request.originLabel,
+          location: plan.request.origin,
+          fromDevice: plan.request.originFromDevice === true,
+        },
+        setReplanPhase,
+        extra,
+      );
+      setReplanning(false);
+      setReplanPhase(null);
+
+      if (response.plan) {
+        router.push(`/plan/${response.plan.id}`);
+        return;
+      }
+      setStartError(errorText(t, response));
+    },
+    [plan, router, t],
+  );
 
   /** Nochmal suchen, diesmal mit doppeltem Umkreis. */
   const widerSuchen = useCallback(async () => {
@@ -269,14 +305,41 @@ export function PlanView({ initialPlan }: Props) {
                   {/* Statt irgendetwas einzubauen: fragen, ob weiter gesucht
                       werden soll. Die Entscheidung bleibt beim Nutzer. */}
                   {note.key === 'noAction' && !plan.request.radiusBoost ? (
-                    <button
-                      type="button"
+                    <Hinweisknopf
                       onClick={() => void widerSuchen()}
                       disabled={replanning}
-                      className="tap ml-1.5 font-semibold text-brand-600 underline underline-offset-2 disabled:opacity-60"
-                    >
-                      {t.plan.widen}
-                    </button>
+                      text={t.plan.widen}
+                    />
+                  ) : null}
+                  {/* Die Reihenfolge wird nur umgestellt, wenn der Nutzer es
+                      ausdrücklich erlaubt. */}
+                  {note.key === 'sequenceDetour' && !verworfen.includes('sequenceDetour') ? (
+                    <>
+                      <Hinweisknopf
+                        onClick={() => setVerworfen((v) => [...v, 'sequenceDetour'])}
+                        disabled={replanning}
+                        text={t.sequence.keep}
+                      />
+                      <Hinweisknopf
+                        onClick={() => void neuPlanen({ sequence: [] })}
+                        disabled={replanning}
+                        text={t.sequence.optimize}
+                      />
+                    </>
+                  ) : null}
+                  {note.key === 'sequenceMissing' ? (
+                    <>
+                      <Hinweisknopf
+                        onClick={() => void neuPlanen({})}
+                        disabled={replanning}
+                        text={t.sequence.again}
+                      />
+                      <Hinweisknopf
+                        onClick={() => void neuPlanen({ sequence: [] })}
+                        disabled={replanning}
+                        text={t.sequence.without}
+                      />
+                    </>
                   ) : null}
                 </span>
               </li>
@@ -353,6 +416,28 @@ export function PlanView({ initialPlan }: Props) {
       />
       <PlanningOverlay open={replanning} phase={replanPhase} />
     </>
+  );
+}
+
+/** Kleiner Knopf direkt im Hinweistext. */
+function Hinweisknopf({
+  text,
+  onClick,
+  disabled,
+}: {
+  text: string;
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="tap ml-1.5 font-semibold text-brand-600 underline underline-offset-2 disabled:opacity-60"
+    >
+      {text}
+    </button>
   );
 }
 

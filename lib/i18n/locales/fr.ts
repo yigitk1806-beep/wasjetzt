@@ -199,6 +199,34 @@ export const fr: Dictionary = {
     from: (label) => `Départ : ${label}`,
   },
 
+  sequence: {
+    title: 'Comment voulez-vous enchaîner ?',
+    hint: 'Touchez ce qui en fait partie. L’ordre se déplace.',
+    add: 'Ajouter',
+    up: 'Monter',
+    down: 'Descendre',
+    remove: 'Retirer',
+    clear: 'Annuler l’ordre',
+    keep: 'Planifier ainsi',
+    optimize: 'Optimiser',
+    again: 'Chercher encore',
+    without: 'Sans ordre imposé',
+    kinds: {
+      food: 'Manger',
+      cafe: 'Café',
+      bar: 'Bar',
+      action: 'Action',
+      cinema: 'Cinéma',
+      culture: 'Culture',
+      nature: 'Plein air',
+      shopping: 'Shopping',
+      wellness: 'Bien-être',
+      gaming: 'Jeux',
+      sport: 'Sport',
+      event: 'Événement',
+    },
+  },
+
   plan: {
     startTitle: (label) => `On part de ${label}`,
     startDevice: 'votre position actuelle',
@@ -464,6 +492,10 @@ export const fr: Dictionary = {
     droppedSlot: () => 'Rien d’adapté n’était ouvert pour une activité de plus.',
     noAction: () => 'Je ne trouve pas d’activité qui convienne dans le coin – mieux vaut moins d’étapes qu’une qui ne va pas.',
     noFood: () => 'Je ne trouve pas de restaurant qui convienne dans le coin.',
+    sequenceMissing: (p) =>
+      `Rien d’adapté n’était ouvert pour « ${p.name} » à cette heure. Je n’ai pas changé l’ordre.`,
+    sequenceDetour: (p) =>
+      `Cet ordre est possible, mais il coûte environ ${p.minutes} min de trajet en plus.`,
     lateStart: (p) => `Presque rien n’est ouvert à cette heure – le plan commence donc à ${p.time}.`,
     tourLateStart: () => 'Presque rien n’est ouvert à cette heure – la visite commence donc plus tard.',
     tourRainStart: (p) =>
@@ -504,6 +536,7 @@ export const fr: Dictionary = {
     cheap: 'pas cher',
     budgetAny: 'budget libre',
     single: 'une seule chose',
+    sequence: (n) => `ordre en ${n} étapes`,
     budgetTotal: (amount) => `${amount} € au total`,
     noFood: 'sans repas',
     hoursRange: (a, b) => `${a}–${b} heures`,

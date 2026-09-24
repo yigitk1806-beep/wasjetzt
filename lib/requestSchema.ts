@@ -6,6 +6,7 @@ import {
   type Mood,
   type Party,
   type PlanRequest,
+  type SequenceKind,
   type SightTheme,
   type TourTweak,
   type UserPreferences,
@@ -16,6 +17,12 @@ const BUDGETS: BudgetPreset[] = ['free', 'low', 'medium', 'high', 'any'];
 const MOBILITIES: Mobility[] = ['walk', 'bike', 'transit', 'car'];
 const MOODS: Mood[] = ['date', 'action', 'chill', 'party', 'food', 'nature', 'gaming', 'new'];
 const SIGHT_THEMES: SightTheme[] = ['classic', 'photo', 'museum', 'park', 'history', 'hidden'];
+const SEQUENCE_KINDS: SequenceKind[] = [
+  'food', 'cafe', 'bar', 'action', 'cinema', 'culture',
+  'nature', 'shopping', 'wellness', 'gaming', 'sport', 'event',
+];
+/** Mehr als fünf Stationen plant niemand von Hand – und kein Abend trägt sie. */
+const MAX_SEQUENCE = 5;
 const TOUR_TWEAKS: TourTweak[] = ['more', 'less-walk', 'museum', 'photo', 'free', 'faster', 'calm', 'surprise'];
 
 const CATEGORIES: Category[] = [
@@ -146,6 +153,13 @@ export function normalizePlanRequest(raw: unknown): PlanRequest {
       homeLat !== undefined && homeLon !== undefined
         ? { lat: homeLat, lon: homeLon }
         : undefined,
+    sequence: (() => {
+      if (!Array.isArray(input.sequence)) return undefined;
+      const folge = input.sequence.filter(
+        (k): k is SequenceKind => typeof k === 'string' && (SEQUENCE_KINDS as string[]).includes(k),
+      );
+      return folge.length > 0 ? folge.slice(0, MAX_SEQUENCE) : undefined;
+    })(),
     singleActivity: input.singleActivity === true,
     preferNovelty: input.preferNovelty === true,
     focusCategory,

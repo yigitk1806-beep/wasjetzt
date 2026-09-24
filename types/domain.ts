@@ -61,6 +61,27 @@ export type SightTheme = 'classic' | 'photo' | 'museum' | 'park' | 'history' | '
 /** Was der Plan ist: ein Abendprogramm oder eine Besichtigungstour. */
 export type PlanMode = 'evening' | 'tour';
 
+/**
+ * Ein Punkt im gewünschten Ablauf – "erst essen, dann Action, danach Café".
+ *
+ * Bewusst gröber als `Category`: Der Nutzer sagt "Action", nicht
+ * "activity oder gaming oder sport". Die Übersetzung in Kategorien macht
+ * die Engine (siehe engine/intent.ts).
+ */
+export type SequenceKind =
+  | 'food'
+  | 'cafe'
+  | 'bar'
+  | 'action'
+  | 'cinema'
+  | 'culture'
+  | 'nature'
+  | 'shopping'
+  | 'wellness'
+  | 'gaming'
+  | 'sport'
+  | 'event';
+
 /** Nachträgliche Änderung einer ganzen Tour. */
 export type TourTweak =
   | 'more'
@@ -389,6 +410,15 @@ export type PlanRequest = {
   homeByLocal?: string;
   /** Wenn gesetzt, endet der Plan Richtung Zuhause. */
   homeLocation?: Coordinates;
+  /**
+   * Gewünschter Ablauf. Ist er gesetzt, ist er eine harte Anforderung: Der
+   * Plan hält diese Reihenfolge ein, auch wenn eine andere kürzere Wege
+   * hätte. Optimiert wird dann innerhalb der Reihenfolge.
+   *
+   * Eine einzelne Position heißt "das zuerst" – danach ergänzt die Engine
+   * wie gewohnt.
+   */
+  sequence?: SequenceKind[];
   /** Nur eine einzelne Aktivität statt eines ganzen Abends. */
   singleActivity?: boolean;
   /** Bevorzugt Unbekanntes. */

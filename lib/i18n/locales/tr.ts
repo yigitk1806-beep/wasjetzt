@@ -199,6 +199,34 @@ export const tr: Dictionary = {
     from: (label) => `Başlangıç: ${label}`,
   },
 
+  sequence: {
+    title: 'Akışınız nasıl olsun?',
+    hint: 'Dahil olanlara dokun. Sıralamayı kaydırabilirsin.',
+    add: 'Ekle',
+    up: 'Yukarı',
+    down: 'Aşağı',
+    remove: 'Kaldır',
+    clear: 'Sırayı kaldır',
+    keep: 'Böyle planla',
+    optimize: 'Eniyileştir',
+    again: 'Tekrar ara',
+    without: 'Sırasız',
+    kinds: {
+      food: 'Yemek',
+      cafe: 'Kafe',
+      bar: 'Bar',
+      action: 'Aksiyon',
+      cinema: 'Sinema',
+      culture: 'Kültür',
+      nature: 'Açık hava',
+      shopping: 'Alışveriş',
+      wellness: 'Wellness',
+      gaming: 'Oyun',
+      sport: 'Spor',
+      event: 'Etkinlik',
+    },
+  },
+
   plan: {
     startTitle: (label) => `Başlangıç noktası: ${label}`,
     startDevice: 'mevcut konumun',
@@ -466,6 +494,10 @@ export const tr: Dictionary = {
     droppedSlot: () => 'Bir aktivite daha için uygun açık bir yer yoktu.',
     noAction: () => 'Şu an yakınlarda uygun bir aktivite bulamıyorum – uymayan bir durak yerine daha az durak daha iyi.',
     noFood: () => 'Şu an yakınlarda uygun bir yemek yeri bulamıyorum.',
+    sequenceMissing: (p) =>
+      `„${p.name}“ için o saatte uygun açık bir yer yoktu. Sıralamayı değiştirmedim.`,
+    sequenceDetour: (p) =>
+      `Bu sıra mümkün, ama yaklaşık ${p.minutes} dk fazla yol demek.`,
     lateStart: (p) => `Bu saatte neredeyse hiçbir yer açık değil – bu yüzden plan saat ${p.time} itibarıyla başlıyor.`,
     tourLateStart: () => 'Bu saatte neredeyse hiçbir yer açık değil – bu yüzden tur daha geç başlıyor.',
     tourRainStart: (p) =>
@@ -497,6 +529,7 @@ export const tr: Dictionary = {
     cheap: 'ucuz',
     budgetAny: 'bütçe fark etmez',
     single: 'sadece tek bir şey',
+    sequence: (n) => `${n} duraklı sıra`,
     budgetTotal: (amount) => `toplam ${amount} €`,
     noFood: 'yemeksiz',
     hoursRange: (a, b) => `${a}–${b} saat`,

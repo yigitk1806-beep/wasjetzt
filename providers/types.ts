@@ -141,6 +141,8 @@ export type ParsedIntent = {
   wantsFood?: boolean;
   /** "Nur eine Sache" – ein Programmpunkt statt eines ganzen Abends. */
   singleActivity?: boolean;
+  /** "Erst essen, dann Action, danach Café" – der gewünschte Ablauf. */
+  sequence?: import('@/types/domain').SequenceKind[];
   availableMinutes?: number;
   moods: import('@/types/domain').Mood[];
   mobility?: Mobility;

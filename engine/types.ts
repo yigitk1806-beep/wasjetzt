@@ -1,5 +1,6 @@
 import type {
   Category,
+  SequenceKind,
   Place,
   PlanRequest,
   PlanVariantKey,
@@ -59,7 +60,9 @@ export type Slot = {
    * Station nicht in den Plan – daran hängt auch der ehrliche Hinweis,
    * wenn sich ein Wunsch nicht erfüllen ließ.
    */
-  need?: 'food' | 'experience' | 'main' | 'extra' | 'winddown';
+  need?: 'food' | 'experience' | 'main' | 'extra' | 'winddown' | 'sequence';
+  /** Bei einem gewuenschten Ablauf: welche Position dieser Slot erfuellt. */
+  sequenceKind?: SequenceKind;
 };
 
 export type ScoringWeights = {

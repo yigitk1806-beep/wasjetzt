@@ -217,6 +217,34 @@ export const de = {
     from: (label: string) => `Start: ${label}`,
   },
 
+  sequence: {
+    title: 'Wie soll euer Ablauf sein?',
+    hint: 'Tippt an, was dazugehört. Die Reihenfolge lässt sich verschieben.',
+    add: 'Hinzufügen',
+    up: 'Nach oben',
+    down: 'Nach unten',
+    remove: 'Entfernen',
+    clear: 'Ablauf aufheben',
+    keep: 'So planen',
+    optimize: 'Optimieren',
+    again: 'Nochmal suchen',
+    without: 'Ohne Reihenfolge',
+    kinds: {
+      food: 'Essen',
+      cafe: 'Café',
+      bar: 'Bar',
+      action: 'Action',
+      cinema: 'Kino',
+      culture: 'Kultur',
+      nature: 'Natur',
+      shopping: 'Bummeln',
+      wellness: 'Wellness',
+      gaming: 'Gaming',
+      sport: 'Sport',
+      event: 'Event',
+    },
+  },
+
   plan: {
     startTitle: (label: string) => `Wir starten von ${label}`,
     startDevice: 'deinem aktuellen Standort',
@@ -490,6 +518,10 @@ export const de = {
     droppedSlot: () => 'Für einen weiteren Programmpunkt war gerade nichts Passendes offen.',
     noAction: () => 'Eine passende Action-Aktivität finde ich hier gerade nicht – lieber weniger Stationen als eine, die nicht passt.',
     noFood: () => 'Ein passendes Lokal finde ich hier gerade nicht.',
+    sequenceMissing: (p: { name: string }) =>
+      `Für „${p.name}“ war zu dieser Zeit nichts Passendes offen. Umgestellt habe ich den Ablauf nicht.`,
+    sequenceDetour: (p: { minutes: number }) =>
+      `Diese Reihenfolge ist möglich, kostet aber etwa ${p.minutes} Min. zusätzlichen Weg.`,
     lateStart: (p: { time: string }) =>
       `Um diese Uhrzeit hat noch kaum etwas geöffnet – der Plan beginnt deshalb um ${p.time} Uhr.`,
     tourLateStart: () => 'Um diese Uhrzeit hat noch kaum etwas geöffnet – die Tour beginnt deshalb später.',
@@ -532,6 +564,7 @@ export const de = {
     cheap: 'günstig',
     budgetAny: 'Budget egal',
     single: 'nur eine Sache',
+    sequence: (n: number) => `Ablauf mit ${n} Stationen`,
     budgetTotal: (amount: number) => `${amount} € gesamt`,
     noFood: 'ohne Essen',
     hoursRange: (a: number, b: number) => `${a}–${b} Stunden`,

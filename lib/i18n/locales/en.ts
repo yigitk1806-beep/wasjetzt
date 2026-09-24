@@ -199,6 +199,34 @@ export const en: Dictionary = {
     from: (label) => `Start: ${label}`,
   },
 
+  sequence: {
+    title: 'How should your evening run?',
+    hint: 'Tap what belongs in it. You can move the steps around.',
+    add: 'Add',
+    up: 'Move up',
+    down: 'Move down',
+    remove: 'Remove',
+    clear: 'Clear the order',
+    keep: 'Plan it this way',
+    optimize: 'Optimise',
+    again: 'Search again',
+    without: 'Without a fixed order',
+    kinds: {
+      food: 'Food',
+      cafe: 'Café',
+      bar: 'Bar',
+      action: 'Action',
+      cinema: 'Cinema',
+      culture: 'Culture',
+      nature: 'Outdoors',
+      shopping: 'Shopping',
+      wellness: 'Wellness',
+      gaming: 'Gaming',
+      sport: 'Sport',
+      event: 'Event',
+    },
+  },
+
   plan: {
     startTitle: (label) => `We start from ${label}`,
     startDevice: 'your current location',
@@ -464,6 +492,10 @@ export const en: Dictionary = {
     droppedSlot: () => 'Nothing suitable was open for one more activity.',
     noAction: () => 'I can’t find a fitting activity nearby right now – better fewer stops than one that doesn’t fit.',
     noFood: () => 'I can’t find a fitting place to eat nearby right now.',
+    sequenceMissing: (p) =>
+      `Nothing suitable was open for “${p.name}” at that time. I did not reorder your plan.`,
+    sequenceDetour: (p) =>
+      `This order works, but it costs about ${p.minutes} min of extra walking.`,
     lateStart: (p) => `Hardly anything is open at this hour – so the plan starts at ${p.time}.`,
     tourLateStart: () => 'Hardly anything is open at this hour – so the tour starts later.',
     tourRainStart: (p) => `It's raining at first – so the tour starts at ${p.time}, when more is open indoors.`,
@@ -503,6 +535,7 @@ export const en: Dictionary = {
     cheap: 'cheap',
     budgetAny: 'any budget',
     single: 'just one thing',
+    sequence: (n) => `${n}-step order`,
     budgetTotal: (amount) => `${amount} € total`,
     noFood: 'without food',
     hoursRange: (a, b) => `${a}–${b} hours`,

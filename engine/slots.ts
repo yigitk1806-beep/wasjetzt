@@ -1,6 +1,6 @@
-import type { Category } from '@/types/domain';
+import type { Category, SequenceKind } from '@/types/domain';
 import type { DayPart } from '@/lib/time';
-import { DRAUSSEN_ROLLEN, ERLEBNIS_ROLLEN } from './intent';
+import { DRAUSSEN_ROLLEN, ERLEBNIS_ROLLEN, FOLGE_ROLLEN } from './intent';
 import type { PlanContext, Slot } from './types';
 
 /**
@@ -138,6 +138,48 @@ function ersatzRollen(ctx: PlanContext, haupt: Category[]): Category[] | undefin
 }
 
 /**
+ * Der gewünschte Ablauf als Slot-Kette.
+ *
+ * Jede Position ist Pflicht und weicht nicht auf andere Kategorien aus: Wer
+ * „erst essen, dann Action“ sagt, bekommt kein Museum an Position zwei, nur
+ * weil das näher läge. Lässt sich eine Position nicht füllen, sagt der Plan
+ * das – er ordnet nicht heimlich um.
+ */
+function ausFolge(ctx: PlanContext, folge: SequenceKind[], minutes: number): Slot[] {
+  const proSlot = Math.max(30, Math.floor((minutes - folge.length * 15) / folge.length));
+  return folge.map((kind, i) => folgeSlot(kind, proSlot, i, folge.length));
+}
+
+/** Kurze Stationen bleiben kurz: Ein Café braucht keine zwei Stunden. */
+const FOLGE_MAX_MIN: Partial<Record<SequenceKind, number>> = {
+  cafe: 60,
+  bar: 75,
+  food: 90,
+  shopping: 75,
+};
+
+function folgeSlot(kind: SequenceKind, proSlot: number, index: number, anzahl: number): Slot {
+  const grenze = FOLGE_MAX_MIN[kind];
+  return {
+    roles: FOLGE_ROLLEN[kind],
+    // Kein Ausweichen: Die Reihenfolge ist eine Zusage, keine Anregung.
+    fallbackRoles: undefined,
+    targetMinutes: grenze ? Math.min(proSlot, grenze) : proSlot,
+    optional: false,
+    label:
+      kind === 'food'
+        ? 'food'
+        : index === anzahl - 1 && (kind === 'cafe' || kind === 'bar')
+          ? 'winddown'
+          : index === 0
+            ? 'main'
+            : 'secondary',
+    need: 'sequence',
+    sequenceKind: kind,
+  };
+}
+
+/**
  * Baut die Slot-Struktur des Plans.
  *
  * Grundsatz: Jeder Slot erfüllt einen Wunsch, den der Nutzer geäußert hat.
@@ -162,6 +204,12 @@ export function buildSlots(ctx: PlanContext): Slot[] {
         need: intent.food && !intent.experience ? 'food' : 'main',
       },
     ];
+  }
+
+  // Hat der Nutzer einen Ablauf genannt, ist der die Struktur des Plans.
+  // Optimiert wird dann nur noch, WELCHE Orte an die Positionen kommen.
+  if (intent.sequence && intent.sequence.length >= 2) {
+    return ausFolge(ctx, intent.sequence, minutes);
   }
 
   const maxSlots = minutes <= 170 ? 2 : minutes <= 330 ? 3 : 4;
@@ -205,6 +253,21 @@ export function buildSlots(ctx: PlanContext): Slot[] {
   };
 
   const slots: Slot[] = [];
+
+  // Eine einzelne genannte Position heißt „das zuerst“ – danach ergänzt die
+  // Engine wie gewohnt.
+  const zuerst = intent.sequence?.length === 1 ? intent.sequence[0] : null;
+  if (zuerst) {
+    slots.push(folgeSlot(zuerst, budgetPerSlot, 0, 1));
+    // Danach das Übliche – aber nichts, was der Nutzer nicht wollte. Wer
+    // „erst Café" sagt, bekommt nicht automatisch ein Abendessen dazu.
+    if (zuerst !== 'food' && intent.food) slots.push(essen);
+    else if (zuerst === 'food') slots.push(hauptSlot);
+    // Ein Absacker nur, wenn die genannte Position nicht selbst einer ist.
+    const istAusklang = zuerst === 'cafe' || zuerst === 'bar';
+    if (slots.length < maxSlots && intent.nightcap && !istAusklang) slots.push(ausklang);
+    return slots.slice(0, maxSlots);
+  }
 
   // Reihenfolge: erst die Unternehmung, dann das Essen, dann der Ausklang.
   //

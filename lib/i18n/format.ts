@@ -1,5 +1,7 @@
 import type { RecentPlan } from '@/lib/clientStore';
-import type { Plan, PlanCost, PlanNote, PlanStep, PriceInfo, PriceLevel } from '@/types/domain';
+import type {
+  Plan, PlanCost, PlanNote, PlanStep, PriceInfo, PriceLevel, SequenceKind,
+} from '@/types/domain';
 import { de as deDict, type Dictionary } from './locales/de';
 
 /**
@@ -111,7 +113,21 @@ export function noteText(t: Dictionary, note: PlanNote): string {
   const alt = note.key ? null : legacyNote(note.text);
   const key = note.key ?? alt?.key;
   const fn = key ? (t.notes as Record<string, (p: never) => string>)[key] : undefined;
-  return fn ? fn((note.params ?? alt?.params ?? {}) as never) : note.text;
+  if (!fn) return note.text;
+
+  // Der Server schickt die Ablauf-Position als Schlüssel ("cafe"). Erst hier
+  // wird daraus ein Wort – so liest auch ein geteilter Link ihn in seiner
+  // eigenen Sprache.
+  const params = { ...(note.params ?? alt?.params ?? {}) };
+  if (typeof params.kind === 'string') {
+    params.name = t.sequence.kinds[params.kind as keyof Dictionary['sequence']['kinds']] ?? params.kind;
+  }
+  return fn(params as never);
+}
+
+/** Name einer Ablauf-Position in der Sprache des Betrachters. */
+export function sequenceLabel(t: Dictionary, kind: SequenceKind): string {
+  return t.sequence.kinds[kind];
 }
 
 type ApiFehler = { error?: string; message?: string; params?: Record<string, string | number> };

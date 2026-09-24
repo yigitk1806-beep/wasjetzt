@@ -1,5 +1,6 @@
 import { dictionaryFor } from '@/lib/i18n';
 import type { LanguageProvider, ParsedIntent, UnderstoodToken } from '@/providers/types';
+import { parseSequence } from './sequenceParser';
 import type { BudgetPreset, Category, Mobility, Mood, Party } from '@/types/domain';
 
 type Rule = {
@@ -383,6 +384,17 @@ export class RuleBasedLanguageProvider implements LanguageProvider {
         intent.understood.push(verstanden);
         intent.understoodTokens!.push(token);
       }
+    }
+
+    // Reihenfolge zum Schluss: Sie ist eine Aussage über den ganzen Satz,
+    // nicht über ein einzelnes Wort.
+    const folge = parseSequence(text);
+    if (folge && folge.length > 0) {
+      intent.sequence = folge;
+      if (folge.includes('food')) intent.wantsFood ??= true;
+      const token: UnderstoodToken = { key: 'sequence', args: [folge.length] };
+      intent.understood.push(understoodText(locale, token));
+      intent.understoodTokens!.push(token);
     }
 
     intent.confidence = Math.min(1, intent.understood.length / 4);

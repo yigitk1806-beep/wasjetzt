@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { PeopleField } from '@/components/ui/PeopleField';
+import { SequenceEditor } from '@/components/ui/SequenceEditor';
 import { PlanningOverlay } from '@/components/PlanningOverlay';
 import { ArrowRight } from '@/components/ui/icons';
 import {
@@ -24,7 +25,7 @@ import { useLocale } from '@/components/LocaleProvider';
 import { useLocation } from '@/hooks/useLocation';
 import { loadPreferences } from '@/lib/clientStore';
 import { requestPlanStreamed, type PlanPhase } from '@/lib/planClient';
-import type { BudgetPreset, Mobility, Mood, Party } from '@/types/domain';
+import type { BudgetPreset, Mobility, Mood, Party, SequenceKind } from '@/types/domain';
 
 const PARTIES: Array<{ value: Party; emoji: string }> = [
   { value: 'solo', emoji: '👤' },
@@ -84,6 +85,8 @@ export default function BuildPlanPage() {
   const [budgetFree, setBudgetFree] = useState(false);
   // undefined = "wenn es passt" (die Uhrzeit entscheidet).
   const [wantsFood, setWantsFood] = useState<boolean | undefined>(undefined);
+  // Gewünschter Ablauf; leer = die Engine entscheidet die Reihenfolge.
+  const [sequence, setSequence] = useState<SequenceKind[]>([]);
   const [moods, setMoods] = useState<Mood[]>([]);
   const [mobility, setMobility] = useState<Mobility>('transit');
   // Beide Uhrzeiten als Ortszeit ("14:30"); null = jetzt bzw. keine Endzeit.
@@ -143,6 +146,9 @@ export default function BuildPlanPage() {
     }
     if (typeof intent.wantsFood === 'boolean') setWantsFood(intent.wantsFood);
     if (intent.singleActivity === true) setSingleActivity(true);
+    if (Array.isArray(intent.sequence) && intent.sequence.length > 0) {
+      setSequence(intent.sequence as SequenceKind[]);
+    }
     if (typeof intent.availableMinutes === 'number') {
       setMinutes(intent.availableMinutes);
       setMinutesTouched(true);
@@ -199,6 +205,7 @@ export default function BuildPlanPage() {
       budget: budgetPreset(budgetTotal, budgetFree, people),
       budgetTotal: budgetFree ? 0 : budgetTotal,
       wantsFood,
+      sequence: sequence.length > 0 ? sequence : undefined,
       moods,
       mobility,
       // Uhrzeiten gehen als Ortszeit zum Server; der rechnet mit der
@@ -393,6 +400,10 @@ export default function BuildPlanPage() {
             }}
             className="mt-1 w-full rounded-2xl bg-canvas-sunk px-4 py-2.5 text-[0.95rem] outline-none ring-brand-300 placeholder:text-ink-faint focus:ring-2"
           />
+        </Section>
+
+        <Section title={t.sequence.title}>
+          <SequenceEditor value={sequence} onChange={setSequence} />
         </Section>
 
         <Section title={t.build.food}>

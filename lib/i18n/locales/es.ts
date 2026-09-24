@@ -199,6 +199,34 @@ export const es: Dictionary = {
     from: (label) => `Salida: ${label}`,
   },
 
+  sequence: {
+    title: '¿Cómo queréis que sea el plan?',
+    hint: 'Toca lo que forma parte. El orden se puede mover.',
+    add: 'Añadir',
+    up: 'Subir',
+    down: 'Bajar',
+    remove: 'Quitar',
+    clear: 'Quitar el orden',
+    keep: 'Planificar así',
+    optimize: 'Optimizar',
+    again: 'Buscar otra vez',
+    without: 'Sin orden fijo',
+    kinds: {
+      food: 'Comer',
+      cafe: 'Café',
+      bar: 'Bar',
+      action: 'Acción',
+      cinema: 'Cine',
+      culture: 'Cultura',
+      nature: 'Aire libre',
+      shopping: 'Compras',
+      wellness: 'Bienestar',
+      gaming: 'Juegos',
+      sport: 'Deporte',
+      event: 'Evento',
+    },
+  },
+
   plan: {
     startTitle: (label) => `Salimos desde ${label}`,
     startDevice: 'tu ubicación actual',
@@ -466,6 +494,10 @@ export const es: Dictionary = {
     droppedSlot: () => 'No había nada adecuado abierto para una actividad más.',
     noAction: () => 'Ahora mismo no encuentro una actividad que encaje cerca – mejor menos paradas que una que no pega.',
     noFood: () => 'Ahora mismo no encuentro un sitio para comer que encaje cerca.',
+    sequenceMissing: (p) =>
+      `No había nada adecuado abierto para «${p.name}» a esa hora. No he cambiado el orden.`,
+    sequenceDetour: (p) =>
+      `Este orden es posible, pero cuesta unos ${p.minutes} min de camino extra.`,
     lateStart: (p) => `A esta hora casi nada está abierto – por eso el plan empieza a las ${p.time}.`,
     tourLateStart: () => 'A esta hora casi nada está abierto – por eso la ruta empieza más tarde.',
     tourRainStart: (p) =>
@@ -506,6 +538,7 @@ export const es: Dictionary = {
     cheap: 'barato',
     budgetAny: 'presupuesto libre',
     single: 'solo una cosa',
+    sequence: (n) => `orden de ${n} pasos`,
     budgetTotal: (amount) => `${amount} € en total`,
     noFood: 'sin comida',
     hoursRange: (a, b) => `${a}–${b} horas`,

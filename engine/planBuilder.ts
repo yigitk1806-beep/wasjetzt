@@ -20,6 +20,7 @@ import type {
   PlanRequest,
   PlanStep,
   PlanVariantKey,
+  SequenceKind,
   TravelLeg,
   UserPreferences,
   WeatherForecast,
@@ -29,7 +30,7 @@ import type { ProviderSet } from '@/providers/registry';
 import { aggregateCost } from './budget';
 import { passesHardFilters } from './hardFilters';
 import { planSummary, planTitle, stepReason, tourSummary, tourTitle } from './narrative';
-import { begruendung, note } from './texts';
+import { begruendung, dict, note } from './texts';
 import { scorePlace, VARIANTS, variantByKey } from './scoring';
 import { buildSlots } from './slots';
 import { capPerPerson, deriveIntent } from './intent';
@@ -227,6 +228,8 @@ type BuildResult = {
   droppedSlots: number;
   /** Wünsche, für die sich in der Nähe nichts Passendes fand. */
   unerfuellt: NonNullable<Slot['need']>[];
+  /** Positionen des gewünschten Ablaufs, die leer bleiben mussten. */
+  offeneFolge: SequenceKind[];
 };
 
 function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
@@ -240,6 +243,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
   let spentMin = 0;
   let dropped = 0;
   const unerfuellt: NonNullable<Slot['need']>[] = [];
+  const offeneFolge: SequenceKind[] = [];
   const usedReasons: string[] = [];
 
   for (let i = 0; i < slots.length; i += 1) {
@@ -266,6 +270,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
       // Ein Pflichtwunsch, der sich nicht erfüllen ließ, wird später ehrlich
       // benannt – statt ihn durch irgendeine andere Station zu ersetzen.
       if (!slot.optional && slot.need) unerfuellt.push(slot.need);
+      if (slot.sequenceKind) offeneFolge.push(slot.sequenceKind);
       continue;
     }
 
@@ -278,7 +283,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
     spentMin += picked.step.price.perPerson?.min ?? 0;
   }
 
-  return { steps, droppedSlots: dropped, unerfuellt };
+  return { steps, droppedSlots: dropped, unerfuellt, offeneFolge };
 }
 
 export function reserveMinutesFor(ctx: PlanContext, isLast: boolean, from: Coordinates): number {
@@ -523,6 +528,7 @@ function buildNotes(
   steps: PlanStep[],
   dropped: number,
   unerfuellt: NonNullable<Slot['need']>[] = [],
+  offeneFolge: SequenceKind[] = [],
 ): PlanNote[] {
   const notes: PlanNote[] = [];
   // Maßgeblich ist das Wetter während des Plans, nicht das beim Erstellen.
@@ -562,17 +568,91 @@ function buildNotes(
     notes.push(note(ctx, 'availability', 'unknownHours', { count: unknownHours }));
   }
 
+  // Eine Position des gewünschten Ablaufs, die leer bleiben musste, wird
+  // benannt. Die Reihenfolge heimlich umzustellen wäre ein Wortbruch.
+  const folgeOffen = offeneFolge.length > 0;
+  if (folgeOffen) {
+    const kind = offeneFolge[0];
+    // `kind` für den Betrachter (der Link kann in jeder Sprache geöffnet
+    // werden), `name` als Text in der Sprache der Anfrage.
+    notes.push(
+      note(ctx, 'availability', 'sequenceMissing', {
+        kind,
+        name: dict(ctx).sequence.kinds[kind],
+      }),
+    );
+  }
+
+  // Kostet die gewünschte Reihenfolge spürbar Weg, sagen wir das – und
+  // lassen den Nutzer entscheiden, ob er sie behalten will.
+  const umweg = umwegMinuten(ctx, steps);
+  if (umweg >= UMWEG_HINWEIS_MIN) {
+    notes.push(note(ctx, 'time', 'sequenceDetour', { minutes: umweg }));
+  }
+
   // Ein Wunsch, der sich nicht erfüllen ließ, wird benannt – nicht durch
   // eine beliebige andere Station kaschiert.
   if (unerfuellt.includes('experience')) {
     notes.push(note(ctx, 'availability', 'noAction'));
   } else if (unerfuellt.includes('food')) {
     notes.push(note(ctx, 'availability', 'noFood'));
-  } else if (dropped > 0 && steps.length > 0) {
+  } else if (dropped > 0 && steps.length > 0 && !folgeOffen) {
+    // Bei einem gewünschten Ablauf ist oben schon genau gesagt, was fehlt.
     notes.push(note(ctx, 'availability', 'droppedSlot'));
   }
 
   return notes;
+}
+
+/** Ab so vielen Minuten Mehrweg lohnt der Hinweis. */
+const UMWEG_HINWEIS_MIN = 8;
+
+/**
+ * Wie viele Minuten Weg kostet die gewünschte Reihenfolge gegenüber der
+ * günstigsten Anordnung derselben Orte?
+ *
+ * Nur bei einem ausdrücklich gewünschten Ablauf – sonst hat die Engine die
+ * Reihenfolge ohnehin selbst gewählt. Gerechnet wird auf der Geometrie: Es
+ * geht um die Größenordnung ("etwa 15 Minuten"), nicht um die Sekunde.
+ */
+function umwegMinuten(ctx: PlanContext, steps: PlanStep[]): number {
+  const folge = ctx.request.sequence;
+  if (!folge || folge.length < 2 || steps.length < 2 || steps.length > 5) return 0;
+
+  const orte = steps.map((s) => s.place.location);
+  const heim = ctx.request.mustBeHomeByISO
+    ? (ctx.request.homeLocation ?? ctx.request.origin)
+    : null;
+
+  const weg = (reihe: Coordinates[]): number => {
+    let summe = 0;
+    let von: Coordinates = ctx.request.origin;
+    for (const ziel of reihe) {
+      summe += estimateTravelMinutes(haversineMeters(von, ziel), ctx.request.mobility);
+      von = ziel;
+    }
+    if (heim) summe += estimateTravelMinutes(haversineMeters(von, heim), ctx.request.mobility);
+    return summe;
+  };
+
+  const gewuenscht = weg(orte);
+  let bester = gewuenscht;
+  for (const reihe of permutationen(orte)) {
+    const wert = weg(reihe);
+    if (wert < bester) bester = wert;
+  }
+  return Math.round(gewuenscht - bester);
+}
+
+/** Alle Anordnungen – bei höchstens fünf Orten sind das 120 Stück. */
+function permutationen<T>(liste: T[]): T[][] {
+  if (liste.length <= 1) return [liste];
+  const raus: T[][] = [];
+  for (let i = 0; i < liste.length; i += 1) {
+    const rest = [...liste.slice(0, i), ...liste.slice(i + 1)];
+    for (const p of permutationen(rest)) raus.push([liste[i], ...p]);
+  }
+  return raus;
 }
 
 export function buildPlan(
@@ -580,7 +660,7 @@ export function buildPlan(
   variant: PlanVariantKey = 'balanced',
 ): Plan | null {
   const profile = variantByKey(variant);
-  let { steps, droppedSlots, unerfuellt } = buildSteps(ctx, profile);
+  let { steps, droppedSlots, unerfuellt, offeneFolge } = buildSteps(ctx, profile);
 
   // Früh am Morgen hat kaum etwas offen. Statt aufzugeben, wird der Beginn
   // stundenweise verschoben – solange noch Zeit im Budget bleibt.
@@ -589,14 +669,16 @@ export function buildPlan(
     verschobenUm += 1;
     const start = new Date(ctx.start.getTime() + verschobenUm * 60 * 60_000);
     if (start >= ctx.latestEnd) break;
-    ({ steps, droppedSlots, unerfuellt } = buildSteps(
+    ({ steps, droppedSlots, unerfuellt, offeneFolge } = buildSteps(
       { ...ctx, start, dayPart: dayPartOf(start, ctx.tzOffsetMin) },
       profile,
     ));
   }
 
   if (steps.length === 0) return null;
-  const plan = assemblePlan(ctx, steps, profile.key, droppedSlots, undefined, unerfuellt);
+  const plan = assemblePlan(
+    ctx, steps, profile.key, droppedSlots, undefined, unerfuellt, offeneFolge,
+  );
   if (verschobenUm > 0) {
     plan.notes.unshift(
       note(ctx, 'time', 'lateStart', { time: formatClock(steps[0].startISO, 'de', ctx.tzOffsetMin) }),
@@ -614,6 +696,7 @@ export function assemblePlan(
     Pick<Plan, 'id' | 'shareCode' | 'participants' | 'meetingPoint' | 'createdAtISO' | 'siblings'>
   >,
   unerfuellt: NonNullable<Slot['need']>[] = [],
+  offeneFolge: SequenceKind[] = [],
 ): Plan {
   const startISO = steps[0].startISO;
   const endISO = steps[steps.length - 1].endISO;
@@ -665,7 +748,7 @@ export function assemblePlan(
     // der Regen von jetzt.
     weatherAtCreation: weatherAt(ctx.weather, departISO) ?? ctx.weather.now ?? null,
     createdAtISO: existing?.createdAtISO ?? new Date().toISOString(),
-    notes: buildNotes(ctx, steps, droppedSlots, unerfuellt),
+    notes: buildNotes(ctx, steps, droppedSlots, unerfuellt, offeneFolge),
     meetingPoint: existing?.meetingPoint,
     participants: existing?.participants ?? [],
     containsMockData: steps.some((s) => s.place.source === 'mock'),
@@ -823,11 +906,20 @@ function echteWegeImAltenZeitplan(plan: Plan, legs: TravelLeg[], ctx: PlanContex
 }
 
 /** Alte Hinweise behalten, die der Neuaufbau nicht selbst erzeugt – ohne Dopplungen. */
+/**
+ * Hinweise darüber, was beim Bauen NICHT gefunden wurde. Der Neuaufbau nach
+ * dem Routing kennt nur die fertigen Stationen und kann sie nicht noch
+ * einmal herleiten – sie würden sonst stillschweigend verschwinden.
+ */
+const BAU_HINWEISE = new Set(['sequenceMissing', 'noAction', 'noFood', 'droppedSlot']);
+
 function mergeNotes(alt: PlanNote[], neu: PlanNote[]): PlanNote[] {
   const kennung = (n: PlanNote) => n.key ?? n.text;
   const vorhanden = new Set(neu.map(kennung));
   const behalten = alt.filter(
-    (n) => (n.kind === 'time' || n.kind === 'info') && !vorhanden.has(kennung(n)),
+    (n) =>
+      (n.kind === 'time' || n.kind === 'info' || BAU_HINWEISE.has(n.key ?? '')) &&
+      !vorhanden.has(kennung(n)),
   );
   return [...behalten, ...neu];
 }

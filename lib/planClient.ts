@@ -2,7 +2,9 @@
 
 import { loadPreferences } from '@/lib/clientStore';
 import { currentLocale } from '@/lib/i18n';
-import type { Category, Mobility, Mood, Party, Plan, SightTheme, TourTweak } from '@/types/domain';
+import type {
+  Category, Mobility, Mood, Party, Plan, SequenceKind, SightTheme, TourTweak,
+} from '@/types/domain';
 
 export type PlanRequestInput = {
   lat: number;
@@ -30,6 +32,8 @@ export type PlanRequestInput = {
   /** Heimkehrzeit als Ortszeit, z. B. "21:00". */
   homeByLocal?: string;
   singleActivity?: boolean;
+  /** Gewünschter Ablauf – harte Anforderung an die Reihenfolge. */
+  sequence?: SequenceKind[];
   preferNovelty?: boolean;
   focusCategory?: Category;
   rawText?: string;
@@ -172,6 +176,7 @@ export async function replanFrom(
       startLocal: r.startLocal,
       homeByLocal: r.homeByLocal,
       singleActivity: r.singleActivity,
+      sequence: r.sequence,
       preferNovelty: r.preferNovelty,
       focusCategory: r.focusCategory,
       rawText: r.rawText,
