@@ -163,26 +163,48 @@ export class OsrmRoutingProvider implements RoutingProvider {
     return Promise.all(queries.map((q) => this.route(q)));
   }
 
-  /** Für die Gesundheitsseite: Antwortet der Routing-Dienst von hier aus? */
-  async probe(): Promise<{ ok: boolean; ms: number; detail: string }> {
-    const start = Date.now();
-    try {
-      const res = await fetch(
-        `${BASE}/routed-foot/route/v1/driving/13.3446,52.5543;13.3400,52.5510?overview=false`,
-        {
+  /**
+   * Für die Gesundheitsseite: Antwortet der Routing-Dienst von hier aus?
+   *
+   * Mehrere Anfragen nacheinander, klein und groß: Auf Vercel war zu sehen,
+   * dass die erste Strecke ankommt und die nächsten ins Zeitlimit laufen –
+   * das lässt sich nur mit einer Messreihe auseinanderhalten.
+   */
+  async probe(): Promise<unknown> {
+    const wege = [
+      { name: 'klein-1', overview: false },
+      { name: 'klein-2', overview: false },
+      { name: 'gross-1', overview: true },
+      { name: 'gross-2', overview: true },
+    ];
+    const ergebnisse: unknown[] = [];
+    for (const weg of wege) {
+      const start = Date.now();
+      const url =
+        `${BASE}/routed-foot/route/v1/driving/13.3446,52.5543;13.3400,52.5510` +
+        (weg.overview ? '?overview=full&geometries=polyline' : '?overview=false');
+      try {
+        const res = await fetch(url, {
           headers: { 'User-Agent': 'WasJetzt/0.1 (Freizeitplaner)' },
           signal: AbortSignal.timeout(8000),
-        },
-      );
-      const json = (await res.json()) as OsrmResponse;
-      return { ok: res.ok && json.code === 'Ok', ms: Date.now() - start, detail: json.code };
-    } catch (error) {
-      return {
-        ok: false,
-        ms: Date.now() - start,
-        detail: error instanceof Error ? `${error.name}: ${error.message}` : 'unbekannt',
-      };
+        });
+        const text = await res.text();
+        ergebnisse.push({
+          weg: weg.name,
+          ok: res.ok,
+          ms: Date.now() - start,
+          bytes: text.length,
+        });
+      } catch (error) {
+        ergebnisse.push({
+          weg: weg.name,
+          ok: false,
+          ms: Date.now() - start,
+          fehler: error instanceof Error ? `${error.name}: ${error.message}` : 'unbekannt',
+        });
+      }
     }
+    return ergebnisse;
   }
 }
 
