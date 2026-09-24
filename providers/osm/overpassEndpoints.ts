@@ -125,7 +125,11 @@ export type OverpassZustand = {
  * Instanzen kaum und sagt trotzdem, ob dort ein Overpass antwortet.
  */
 export async function probeOverpass(timeoutMs = 5000): Promise<OverpassZustand[]> {
-  const frage = '[out:json][timeout:5];out count;';
+  // Ein Häuserblock, ein Ergebnis. `out count;` ohne Ausschnitt würde die
+  // ganze Datenbank zählen – das belastet gespendete Server unnötig und
+  // läuft dort regelmäßig ins Zeitlimit, ohne dass etwas kaputt wäre.
+  const frage =
+    '[out:json][timeout:5][bbox:52.5200,13.4050,52.5210,13.4060];node["amenity"];out 1;';
 
   return Promise.all(
     overpassZiele().map(async (ziel): Promise<OverpassZustand> => {
