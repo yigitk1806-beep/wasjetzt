@@ -35,14 +35,17 @@ const FEHLER_BIS_PAUSE = 3;
 const PAUSE_MS = 90_000;
 
 /**
- * Wie viele Anfragen gleichzeitig hinausgehen dürfen.
+ * Wie viele Anfragen gleichzeitig hinausgehen dürfen: genau eine.
  *
- * Eine Tour hat sieben Teilstrecken. Werden die alle auf einmal abgefragt,
- * beantwortet die öffentliche Instanz die ersten beiden und lässt den Rest
- * ins Zeitlimit laufen – gemessen: Strecke 1 und 2 echt, 3 bis 7 geschätzt.
- * Nacheinander dauert dasselbe keine halbe Sekunde und liefert alles echt.
+ * Gemessen an der Produktion: Vier Anfragen nacheinander beantwortet die
+ * öffentliche Instanz in 112 bis 366 ms. Laufen zwei gleichzeitig, kommt
+ * eine an und die andere läuft ins Zeitlimit – auf der Karte wurde daraus
+ * eine gestrichelte Luftlinie. Der Dienst bedient pro Absender offenbar nur
+ * eine Verbindung.
+ *
+ * Nacheinander kostet eine Tour mit sieben Strecken unter einer Sekunde.
  */
-const MAX_PARALLEL = 2;
+const MAX_PARALLEL = 1;
 
 type OsrmResponse = {
   code: string;
