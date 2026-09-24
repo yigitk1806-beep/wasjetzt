@@ -51,10 +51,14 @@ function dedupe<T>(list: T[]): T[] {
 function hauptRollen(ctx: PlanContext): Category[] {
   const { intent } = ctx;
   if (intent.wish) return dedupe([intent.wish, ...verwandte(intent.wish)]);
+  if (intent.experience) return dedupe([...ERLEBNIS, ...(intent.outdoor ? DRAUSSEN_ROLLEN : [])]);
   // Wer „Essen" gewählt hat, bekommt einen Abend ums Essen herum: das
   // Lokal hat einen eigenen Slot, hier kommt dazu, was dazu passt.
+  //
+  // Steht bewusst hinter dem Erlebnis: Das Wort „essen" in einem Satz wie
+  // „etwas Action und danach essen" setzt ebenfalls diese Kachel – stünde
+  // die Regel vorn, würde aus der Action eine Bar.
   if (intent.foodFocus) return dedupe(['cafe', 'bar', 'culture', 'cinema']);
-  if (intent.experience) return dedupe([...ERLEBNIS, ...(intent.outdoor ? DRAUSSEN_ROLLEN : [])]);
   if (intent.outdoor) return dedupe([...DRAUSSEN_ROLLEN, 'culture']);
   if (intent.romantic) return dedupe([...ROMANTISCH, ...TAGESZEIT[ctx.dayPart]]);
   if (intent.calm) return dedupe([...RUHIG, ...TAGESZEIT[ctx.dayPart]]);
