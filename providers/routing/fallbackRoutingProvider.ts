@@ -35,4 +35,10 @@ export class FallbackRoutingProvider implements RoutingProvider {
   async routeMany(queries: RouteQuery[]): Promise<TravelLeg[]> {
     return Promise.all(queries.map((q) => this.route(q)));
   }
+
+  /** Reicht den Erreichbarkeitstest an die echte Quelle durch. */
+  async probe(): Promise<unknown> {
+    const probe = (this.primary as { probe?: () => Promise<unknown> }).probe;
+    return probe ? probe.call(this.primary) : 'kein Test verfuegbar';
+  }
 }

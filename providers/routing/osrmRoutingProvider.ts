@@ -24,6 +24,16 @@ const BASE = 'https://routing.openstreetmap.de';
  */
 const TIMEOUTS_MS = [4000, 7000];
 
+/**
+ * Wenn der Dienst gar nicht antwortet, kostet jeder Weg elf Sekunden
+ * Wartezeit – bei vier Wegen ist der Plan tot, obwohl die geometrische
+ * Schätzung längst bereitstünde. Nach mehreren Fehlschlägen hintereinander
+ * wird deshalb kurz gar nicht mehr gefragt; die Wege sind dann ehrlich als
+ * „ca." gekennzeichnet, aber sofort da.
+ */
+const FEHLER_BIS_PAUSE = 3;
+const PAUSE_MS = 90_000;
+
 type OsrmResponse = {
   code: string;
   routes?: Array<{ distance: number; duration: number; geometry?: string }>;
@@ -43,6 +53,9 @@ export class OsrmRoutingProvider implements RoutingProvider {
   private cache = new Map<string, { at: number; leg: TravelLeg }>();
   private inflight = new Map<string, Promise<TravelLeg>>();
   private readonly ttlMs = 30 * 60 * 1000;
+  /** Fehlschläge in Folge und, falls die Pause läuft, ihr Ende. */
+  private fehler = 0;
+  private pauseBis = 0;
 
   async route(query: RouteQuery): Promise<TravelLeg> {
     const profile = PROFILE[query.mode];
@@ -51,6 +64,9 @@ export class OsrmRoutingProvider implements RoutingProvider {
     const key = cacheKey(query);
     const cached = this.cache.get(key);
     if (cached && Date.now() - cached.at < this.ttlMs) return cached.leg;
+
+    // Läuft die Pause, sofort abgeben statt jeden Weg einzeln auszusitzen.
+    if (Date.now() < this.pauseBis) throw new Error('OSRM pausiert');
 
     // Die Planvarianten teilen sich oft denselben Weg (etwa vom Standort zum
     // ersten Restaurant). Ohne diese Zusammenfassung würde derselbe Weg
@@ -92,7 +108,13 @@ export class OsrmRoutingProvider implements RoutingProvider {
         letzterFehler = error;
       }
     }
-    if (!json) throw letzterFehler ?? new Error('OSRM nicht erreichbar');
+    if (!json) {
+      this.fehler += 1;
+      if (this.fehler >= FEHLER_BIS_PAUSE) this.pauseBis = Date.now() + PAUSE_MS;
+      throw letzterFehler ?? new Error('OSRM nicht erreichbar');
+    }
+    this.fehler = 0;
+    this.pauseBis = 0;
 
     const route = json.routes?.[0];
     if (json.code !== 'Ok' || !route) throw new Error(`OSRM: ${json.code}`);
@@ -112,6 +134,28 @@ export class OsrmRoutingProvider implements RoutingProvider {
 
   async routeMany(queries: RouteQuery[]): Promise<TravelLeg[]> {
     return Promise.all(queries.map((q) => this.route(q)));
+  }
+
+  /** Für die Gesundheitsseite: Antwortet der Routing-Dienst von hier aus? */
+  async probe(): Promise<{ ok: boolean; ms: number; detail: string }> {
+    const start = Date.now();
+    try {
+      const res = await fetch(
+        `${BASE}/routed-foot/route/v1/driving/13.3446,52.5543;13.3400,52.5510?overview=false`,
+        {
+          headers: { 'User-Agent': 'WasJetzt/0.1 (Freizeitplaner)' },
+          signal: AbortSignal.timeout(8000),
+        },
+      );
+      const json = (await res.json()) as OsrmResponse;
+      return { ok: res.ok && json.code === 'Ok', ms: Date.now() - start, detail: json.code };
+    } catch (error) {
+      return {
+        ok: false,
+        ms: Date.now() - start,
+        detail: error instanceof Error ? `${error.name}: ${error.message}` : 'unbekannt',
+      };
+    }
   }
 }
 

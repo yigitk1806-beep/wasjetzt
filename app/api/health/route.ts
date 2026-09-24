@@ -27,6 +27,16 @@ export async function GET(request: Request) {
     version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'lokal',
   };
 
+  // Optional: Erreicht diese Instanz den Routing-Dienst? Nur auf Anfrage,
+  // damit die Gesundheitspruefung selbst schnell bleibt. Ohne diesen Test
+  // ist von aussen nicht zu unterscheiden, ob Wege geschaetzt sind, weil
+  // OSRM kein Profil hat oder weil es von hier aus nicht antwortet.
+  if (new URL(request.url).searchParams.get('routing') === '1') {
+    const routing = getProviders().routing;
+    const probe = (routing as { probe?: () => Promise<unknown> }).probe;
+    checks.routing = probe ? await probe.call(routing) : 'kein Test verfuegbar';
+  }
+
   // Optional: Lesetest auf den geteilten Ortscache, z. B. ?cell=53.560:10.000
   // Zeigt, ob eine vorgeladene Kachel von dieser Instanz aus gefunden wird
   // und wie lange das dauert.
