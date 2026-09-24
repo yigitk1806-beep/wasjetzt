@@ -9,6 +9,8 @@ import { FallbackRoutingProvider } from './routing/fallbackRoutingProvider';
 import { OsrmRoutingProvider } from './routing/osrmRoutingProvider';
 import { OpenMeteoWeatherProvider } from './weather/openMeteoWeatherProvider';
 import { OpenMeteoGeocodingProvider } from './geocoding/openMeteoGeocodingProvider';
+import { PhotonGeocodingProvider } from './geocoding/photonGeocodingProvider';
+import { CompositeGeocodingProvider } from './geocoding/compositeGeocodingProvider';
 import { RuleBasedLanguageProvider } from './language/ruleBasedLanguageProvider';
 import type {
   EventProvider,
@@ -66,7 +68,12 @@ export function getProviders(): ProviderSet {
         new OsrmRoutingProvider(),
         new EstimateRoutingProvider(),
       ),
-      geocoding: new OpenMeteoGeocodingProvider(),
+      // Städte über Open-Meteo (gutes Ranking nach Einwohnerzahl),
+      // Adressen über Photon (echte Hausnummern-Koordinaten).
+      geocoding: new CompositeGeocodingProvider(
+        new OpenMeteoGeocodingProvider(),
+        new PhotonGeocodingProvider(),
+      ),
       language: new RuleBasedLanguageProvider(),
     };
   }

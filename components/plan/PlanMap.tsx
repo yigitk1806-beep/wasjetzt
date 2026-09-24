@@ -17,6 +17,8 @@ type Props = {
   /** Rückweg, falls eine Heimkehrzeit gesetzt ist. */
   returnHome?: Plan['returnHome'];
   home?: Coordinates;
+  /** Beschriftung des Startpunkts – erscheint am Start-Marker. */
+  originLabel?: string;
 };
 
 /**
@@ -41,7 +43,7 @@ const ORANGE = '#f15c1c';
  * Nur wo es kein Routing gibt (etwa Bus & Bahn), steht eine gestrichelte
  * Luftlinie, und die Beschriftung sagt das auch.
  */
-export function PlanMap({ origin, steps, mobility, returnHome, home }: Props) {
+export function PlanMap({ origin, steps, mobility, returnHome, home, originLabel }: Props) {
   const { t } = useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletNS.Map | null>(null);
@@ -116,14 +118,15 @@ export function PlanMap({ origin, steps, mobility, returnHome, home }: Props) {
       }
       if (returnHome) strecke(from, home ?? origin, returnHome.geometry, true);
 
-      // Startpunkt
+      // Startpunkt – klar erkennbar, weil an ihm der ganze Plan hängt.
       L.marker([origin.lat, origin.lon], {
         icon: L.divIcon({
           className: '',
-          html: '<span class="block h-3 w-3 rounded-full border-2 border-white bg-ink shadow"></span>',
-          iconSize: [12, 12],
-          iconAnchor: [6, 6],
+          html: '<span class="grid h-7 w-7 place-items-center rounded-full bg-ink text-[0.8rem] shadow-lift ring-2 ring-white">📍</span>',
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
         }),
+        title: originLabel,
         keyboard: false,
       }).addTo(map);
 
@@ -150,7 +153,7 @@ export function PlanMap({ origin, steps, mobility, returnHome, home }: Props) {
         mapRef.current = null;
       }
     };
-  }, [origin.lat, origin.lon, steps, returnHome, home]);
+  }, [origin.lat, origin.lon, steps, returnHome, home, originLabel]);
 
   return (
     // `isolate`: Leaflet stapelt seine Ebenen mit z-index 400 und höher. Ohne

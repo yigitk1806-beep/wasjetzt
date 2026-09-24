@@ -14,12 +14,15 @@ import { ShareSheet } from '@/components/plan/ShareSheet';
 import { GroupPanel } from '@/components/plan/GroupPanel';
 import { FeedbackSheet } from '@/components/plan/FeedbackSheet';
 import { PlanHeader } from '@/components/plan/PlanHeader';
+import { StartPointBar, startLabel } from '@/components/plan/StartPointBar';
+import { StartPointSheet, type StartPoint } from '@/components/location/StartPointSheet';
 import { TimeSheet } from '@/components/plan/TimeSheet';
+import { useLocation } from '@/hooks/useLocation';
 import { formatClock } from '@/lib/time';
 import { useLocale } from '@/components/LocaleProvider';
 import { duration, errorText, noteText } from '@/lib/i18n/format';
 import { recordPlanStarted } from '@/lib/clientStore';
-import { replacePlanStep, requestPlanStreamed, type PlanPhase } from '@/lib/planClient';
+import { replacePlanStep, replanFrom, requestPlanStreamed, type PlanPhase } from '@/lib/planClient';
 import type { Plan, PlanStep, TourTweak } from '@/types/domain';
 import { TourStop, navigationUrl } from './TourStop';
 
@@ -76,6 +79,8 @@ export function TourView({ initialPlan }: Props) {
   const [regenerating, setRegenerating] = useState(false);
   const [tweakError, setTweakError] = useState<string | null>(null);
   const [timeOpen, setTimeOpen] = useState(false);
+  const [startOpen, setStartOpen] = useState(false);
+  const { setManual, requestDevice } = useLocation();
 
   // Wo man gerade steht: -1 = noch nicht gestartet.
   const [position, setPosition] = useState(-1);
@@ -192,6 +197,23 @@ export function TourView({ initialPlan }: Props) {
     setTweakError(errorText(t, response, t.tour.tweakFailed));
   }
 
+  /** Anderer Startpunkt: Die Tour wird um den neuen Punkt herum neu gebaut. */
+  async function startWechseln(next: StartPoint) {
+    if (!next.fromDevice) setManual(next.label, next.location);
+    setTweakError(null);
+    setRegenerating(true);
+    setPhase(null);
+
+    const response = await replanFrom(plan, next, setPhase);
+    if (response.plan) {
+      router.push(`/plan/${response.plan.id}`);
+      return;
+    }
+    setRegenerating(false);
+    setPhase(null);
+    setTweakError(errorText(t, response, t.tour.tweakFailed));
+  }
+
   function oeffnen(url: string) {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
@@ -248,6 +270,12 @@ export function TourView({ initialPlan }: Props) {
       <main className="shell space-y-5 pb-32 pt-3">
         <PlanHeader plan={plan} onTimeClick={() => setTimeOpen(true)} />
 
+        <StartPointBar
+          request={plan.request}
+          busy={regenerating}
+          onChange={() => setStartOpen(true)}
+        />
+
         <AnimatePresence>
           {weatherAlert ? (
             <motion.div
@@ -283,6 +311,7 @@ export function TourView({ initialPlan }: Props) {
           mobility={plan.request.mobility}
           returnHome={plan.returnHome}
           home={plan.request.homeLocation}
+          originLabel={startLabel(t, plan.request)}
         />
 
         <ol aria-label={t.tour.stationsAria(stationen)}>
@@ -402,6 +431,13 @@ export function TourView({ initialPlan }: Props) {
       <ShareSheet plan={plan} open={shareOpen} onClose={() => setShareOpen(false)} />
       <TimeSheet plan={plan} open={timeOpen} onClose={() => setTimeOpen(false)} onPlanChange={setPlan} />
       <FeedbackSheet plan={plan} open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+      <StartPointSheet
+        open={startOpen}
+        onClose={() => setStartOpen(false)}
+        onPick={(next) => void startWechseln(next)}
+        onUseDevice={() => requestDevice()}
+        near={plan.request.origin}
+      />
       <PlanningOverlay open={regenerating} phase={phase} />
     </>
   );

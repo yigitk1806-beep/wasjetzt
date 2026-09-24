@@ -1,5 +1,5 @@
 import type { RecentPlan } from '@/lib/clientStore';
-import type { Plan, PlanNote, PlanStep, PriceInfo, PriceLevel } from '@/types/domain';
+import type { Plan, PlanCost, PlanNote, PlanStep, PriceInfo, PriceLevel } from '@/types/domain';
 import { de as deDict, type Dictionary } from './locales/de';
 
 /**
@@ -32,6 +32,23 @@ export function price(t: Dictionary, info: PriceInfo, currency: string): string 
   }
   if (info.level === 0) return info.levelEstimated ? t.price.mostlyFree : t.price.free;
   return t.price.estimated(SYMBOLE[info.level]);
+}
+
+/**
+ * Preis eines ganzen Plans. Gezeigt wird die Summe für die Gruppe – so, wie
+ * das Budget auch gemeint war. Eine Zahl steht nur dort, wo jeder Einzelpreis
+ * echt ist; sonst bleibt es beim Niveau mit sichtbarem „geschätzt“.
+ */
+export function planPrice(t: Dictionary, cost: PlanCost, currency: string): string {
+  const symbol = currency === 'EUR' ? '€' : currency;
+  const gruppe = cost.groupSize ?? 1;
+  if (cost.total && gruppe > 1) {
+    const { min, max } = cost.total;
+    if (max === 0) return t.price.free;
+    const betrag = min === max ? `${min} ${symbol}` : `${min}–${max} ${symbol}`;
+    return `${betrag} ${t.build.budgetTotal}`;
+  }
+  return price(t, { level: cost.level, levelEstimated: cost.levelEstimated, perPerson: cost.perPerson }, currency);
 }
 
 /** "Heute", "Morgen" oder der Wochentag – in Ortszeit des Plans. */

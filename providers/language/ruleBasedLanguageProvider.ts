@@ -25,6 +25,11 @@ function toNumber(raw: string | undefined): number | undefined {
   return NUMBER_WORDS[cleaned];
 }
 
+/** "zu zweit", "zu viert" – im Deutschen die gewohnte Art, eine Gruppe zu nennen. */
+const ZU_WORT: Record<string, number> = {
+  zweit: 2, dritt: 3, viert: 4, fünft: 5, fuenft: 5, sechst: 6, siebt: 7, acht: 8,
+};
+
 function addMood(intent: Mutable, mood: Mood) {
   if (!intent.moods.includes(mood)) intent.moods.push(mood);
 }
@@ -64,6 +69,16 @@ const RULES: Rule[] = [
     label: { key: 'friends' },
   },
   {
+    test: /\bzu\s+(zweit|dritt|viert|fünft|fuenft|sechst|siebt|acht)\b/i,
+    apply: (i, m) => {
+      const n = ZU_WORT[m[1].toLowerCase()];
+      if (!n) return;
+      i.groupSize = n;
+      i.party ??= n === 2 ? 'partner' : 'friends';
+    },
+    label: (m) => ({ key: 'people', args: [ZU_WORT[m[1].toLowerCase()] ?? 0] }),
+  },
+  {
     test: /\b(?:wir sind|zu)\s+(\d{1,2}|zwei|drei|vier|fünf|fuenf|sechs|sieben|acht|two|three|four|five|six)\b/i,
     apply: (i, m) => {
       const n = toNumber(m[1]);
@@ -89,6 +104,24 @@ const RULES: Rule[] = [
     label: (m) => ({ key: 'people', args: [toNumber(m[1]) ?? 0] }),
   },
 
+  // ---- Essen ----------------------------------------------------------
+  {
+    test: /\b(essen gehen|abendessen|mittagessen|dinner|lunch|etwas essen|was essen|essen|restaurant|dine)\b/i,
+    apply: (i) => {
+      i.wantsFood = true;
+      addMood(i, 'food');
+    },
+    label: { key: 'food' },
+  },
+  {
+    test: /\b(ohne essen|nichts essen|kein essen|nicht essen|no food|schon gegessen)\b/i,
+    apply: (i) => {
+      i.wantsFood = false;
+      i.moods = i.moods.filter((m) => m !== 'food');
+    },
+    label: { key: 'noFood' },
+  },
+
   // ---- Budget ---------------------------------------------------------
   {
     test: /\b(kostenlos|umsonst|gratis|kein geld|free|0\s*€)\b/i,
@@ -99,7 +132,9 @@ const RULES: Rule[] = [
     label: { key: 'free' },
   },
   {
-    test: /(\d{1,4})\s*(?:€|eur|euro)/i,
+    // "pro Person" ist der Sonderfall – ohne diesen Zusatz meint ein Betrag
+    // das Budget der ganzen Gruppe.
+    test: /(\d{1,4})\s*(?:€|eur|euro)\s*(?:pro\s*(?:person|kopf|nase)|p\.?\s?p\.?|each|per person)/i,
     apply: (i, m) => {
       const amount = Number(m[1]);
       if (!Number.isFinite(amount)) return;
@@ -107,6 +142,17 @@ const RULES: Rule[] = [
       i.budget = amount <= 1 ? 'free' : amount <= 25 ? 'low' : amount <= 60 ? 'medium' : 'high';
     },
     label: (m) => ({ key: 'budget', args: [Number(m[1])] }),
+  },
+  {
+    test: /(\d{1,4})\s*(?:€|eur|euro)/i,
+    apply: (i, m) => {
+      const amount = Number(m[1]);
+      if (!Number.isFinite(amount) || i.budgetPerPerson !== undefined) return;
+      i.budgetTotal = amount;
+      const proKopf = amount / Math.max(1, i.groupSize ?? 2);
+      i.budget = proKopf <= 1 ? 'free' : proKopf <= 25 ? 'low' : proKopf <= 60 ? 'medium' : 'high';
+    },
+    label: (m) => ({ key: 'budgetTotal', args: [Number(m[1])] }),
   },
   {
     test: /\b(günstig|guenstig|billig|wenig geld|sparen|cheap|low budget)\b/i,

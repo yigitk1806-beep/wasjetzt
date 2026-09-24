@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
+import { PeopleField } from '@/components/build/PeopleField';
 import { PlanningOverlay } from '@/components/PlanningOverlay';
 import { ArrowRight } from '@/components/ui/icons';
 import {
@@ -16,7 +17,8 @@ import {
   startMinutes,
   useNowClock,
 } from '@/components/ui/TimeField';
-import { duration, errorText } from '@/lib/i18n/format';
+import { StartPointSheet } from '@/components/location/StartPointSheet';
+import { duration, errorText, locationLabel } from '@/lib/i18n/format';
 import type { UnderstoodToken } from '@/providers/types';
 import { useLocale } from '@/components/LocaleProvider';
 import { useLocation } from '@/hooks/useLocation';
@@ -33,7 +35,20 @@ const PARTIES: Array<{ value: Party; emoji: string }> = [
 
 const TIMES = [{ minutes: 90 }, { minutes: 180 }, { minutes: 300 }, { minutes: 480 }] as const;
 
-const BUDGETS: BudgetPreset[] = ['free', 'low', 'medium', 'high', 'any'];
+/**
+ * Budget als Gesamtbetrag der Gruppe. „100 €" heißt 100 € für den Abend,
+ * nicht 100 € je Kopf – deshalb stehen hier Summen und keine Stufen.
+ * `null` = kostenlos, `undefined` = egal.
+ */
+const BUDGET_BETRAEGE = [50, 100, 200] as const;
+
+/** Das Preisniveau, das zu einem Betrag pro Kopf passt. */
+function budgetPreset(total: number | undefined, frei: boolean, people: number): BudgetPreset {
+  if (frei) return 'free';
+  if (total === undefined) return 'any';
+  const proKopf = total / Math.max(1, people);
+  return proKopf <= 1 ? 'free' : proKopf <= 25 ? 'low' : proKopf <= 60 ? 'medium' : 'high';
+}
 
 const MOODS: Array<{ value: Mood; emoji: string }> = [
   { value: 'date', emoji: '❤️' },
@@ -56,13 +71,19 @@ const MOBILITY: Array<{ value: Mobility; emoji: string }> = [
 export default function BuildPlanPage() {
   const router = useRouter();
   const { t, locale } = useLocale();
-  const { location } = useLocation();
+  const { location, requestDevice, setManual } = useLocation();
+  const [startOpen, setStartOpen] = useState(false);
 
   const [rawText, setRawText] = useState('');
   const [understood, setUnderstood] = useState<UnderstoodToken[]>([]);
   const [party, setParty] = useState<Party>('friends');
+  const [people, setPeople] = useState(2);
   const [minutes, setMinutes] = useState(180);
-  const [budget, setBudget] = useState<BudgetPreset>('any');
+  // Gesamtbudget der Gruppe; undefined = egal, `budgetFree` = kostenlos.
+  const [budgetTotal, setBudgetTotal] = useState<number | undefined>(undefined);
+  const [budgetFree, setBudgetFree] = useState(false);
+  // undefined = "wenn es passt" (die Uhrzeit entscheidet).
+  const [wantsFood, setWantsFood] = useState<boolean | undefined>(undefined);
   const [moods, setMoods] = useState<Mood[]>([]);
   const [mobility, setMobility] = useState<Mobility>('transit');
   // Beide Uhrzeiten als Ortszeit ("14:30"); null = jetzt bzw. keine Endzeit.
@@ -115,6 +136,12 @@ export default function BuildPlanPage() {
 
   function applyIntent(intent: Record<string, unknown>) {
     if (typeof intent.party === 'string') setParty(intent.party as Party);
+    if (typeof intent.groupSize === 'number') setPeople(intent.groupSize);
+    if (typeof intent.budgetTotal === 'number') {
+      setBudgetTotal(intent.budgetTotal);
+      setBudgetFree(intent.budgetTotal === 0);
+    }
+    if (typeof intent.wantsFood === 'boolean') setWantsFood(intent.wantsFood);
     if (typeof intent.availableMinutes === 'number') {
       setMinutes(intent.availableMinutes);
       setMinutesTouched(true);
@@ -123,7 +150,6 @@ export default function BuildPlanPage() {
       setStartAt(clockFromMin(intent.startMinutes));
       setShowMore(true);
     }
-    if (typeof intent.budget === 'string') setBudget(intent.budget as BudgetPreset);
     if (typeof intent.mobility === 'string') setMobility(intent.mobility as Mobility);
     if (Array.isArray(intent.moods) && intent.moods.length > 0) {
       setMoods(intent.moods as Mood[]);
@@ -146,22 +172,32 @@ export default function BuildPlanPage() {
   }, [fensterMin, minutesTouched]);
 
   async function submit() {
-    if (!location) {
-      router.push('/');
-      return;
+    // Ohne Startpunkt kein Plan – lieber hier danach fragen, als den Nutzer
+    // ohne Erklärung auf die Startseite zurückzuwerfen.
+    let start = location;
+    if (!start) {
+      start = await requestDevice();
+      if (!start) {
+        setStartOpen(true);
+        return;
+      }
     }
     setBusy(true);
     setPhase(null);
     setError(null);
 
     const response = await requestPlanStreamed({
-      lat: location.location.lat,
-      lon: location.location.lon,
-      originLabel: location.label,
+      lat: start.location.lat,
+      lon: start.location.lon,
+      originLabel: start.label,
+      originFromDevice: start.fromDevice,
       startISO: new Date().toISOString(),
       availableMinutes: minutes,
       party,
-      budget,
+      groupSize: people,
+      budget: budgetPreset(budgetTotal, budgetFree, people),
+      budgetTotal: budgetFree ? 0 : budgetTotal,
+      wantsFood,
       moods,
       mobility,
       // Uhrzeiten gehen als Ortszeit zum Server; der rechnet mit der
@@ -204,6 +240,23 @@ export default function BuildPlanPage() {
       </header>
 
       <main className="shell space-y-7 pb-40 pt-5">
+        {/* Startpunkt schon beim Erstellen sichtbar – von ihm hängt alles ab. */}
+        <button
+          type="button"
+          onClick={() => setStartOpen(true)}
+          className="tap -mt-1 flex w-full items-center gap-2.5 rounded-2xl bg-canvas-sunk px-3.5 py-2.5 text-left"
+        >
+          <span aria-hidden>📍</span>
+          <span className="min-w-0 flex-1 truncate text-[0.86rem] text-ink-soft">
+            {t.start.from(
+              location ? (locationLabel(t, location.label) ?? t.start.device) : t.start.device,
+            )}
+          </span>
+          <span className="shrink-0 text-[0.78rem] font-semibold text-brand-600">
+            {t.plan.changeStart}
+          </span>
+        </button>
+
         {/* Freitext zuerst – das ist der schnellste Weg. */}
         <section className="space-y-2">
           <label htmlFor="freetext" className="text-[0.95rem] font-bold tracking-tight">
@@ -274,17 +327,84 @@ export default function BuildPlanPage() {
           </div>
         </Section>
 
+        <Section title={t.build.people}>
+          <PeopleField value={people} onChange={setPeople} />
+        </Section>
+
         <Section title={t.build.budget}>
           <div className="flex flex-wrap gap-2">
-            {BUDGETS.map((option) => (
+            <Chip
+              selected={budgetFree}
+              onClick={() => {
+                setBudgetFree(true);
+                setBudgetTotal(0);
+              }}
+            >
+              {t.build.budgets.free}
+            </Chip>
+            {BUDGET_BETRAEGE.map((betrag) => (
               <Chip
-                key={option}
-                selected={budget === option}
-                onClick={() => setBudget(option)}
+                key={betrag}
+                selected={!budgetFree && budgetTotal === betrag}
+                onClick={() => {
+                  setBudgetFree(false);
+                  setBudgetTotal(betrag);
+                }}
               >
-                {t.build.budgets[option]}
+                {betrag} €
               </Chip>
             ))}
+            <Chip
+              selected={!budgetFree && budgetTotal === undefined}
+              onClick={() => {
+                setBudgetFree(false);
+                setBudgetTotal(undefined);
+              }}
+            >
+              {t.build.budgets.any}
+            </Chip>
+          </div>
+          {/* Eindeutig: Der Betrag gilt für die ganze Runde. */}
+          {!budgetFree && budgetTotal !== undefined ? (
+            <p className="px-1 pt-0.5 text-[0.82rem] font-medium text-ink-soft">
+              💶 {budgetTotal} € {t.build.budgetTotal} ·{' '}
+              <span className="font-normal text-ink-muted">{t.build.budgetHint(people)}</span>
+            </p>
+          ) : null}
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={10000}
+            value={budgetFree || budgetTotal === undefined ? '' : budgetTotal}
+            placeholder={t.build.budgetCustom}
+            aria-label={t.build.budgetCustom}
+            onChange={(e) => {
+              const wert = e.target.value;
+              if (wert === '') {
+                setBudgetTotal(undefined);
+                return;
+              }
+              const n = Number(wert);
+              if (!Number.isFinite(n)) return;
+              setBudgetFree(false);
+              setBudgetTotal(Math.max(0, Math.min(10000, Math.round(n))));
+            }}
+            className="mt-1 w-full rounded-2xl bg-canvas-sunk px-4 py-2.5 text-[0.95rem] outline-none ring-brand-300 placeholder:text-ink-faint focus:ring-2"
+          />
+        </Section>
+
+        <Section title={t.build.food}>
+          <div className="flex flex-wrap gap-2">
+            <Chip emoji="🍽️" selected={wantsFood === true} onClick={() => setWantsFood(true)}>
+              {t.build.foodYes}
+            </Chip>
+            <Chip selected={wantsFood === false} onClick={() => setWantsFood(false)}>
+              {t.build.foodNo}
+            </Chip>
+            <Chip selected={wantsFood === undefined} onClick={() => setWantsFood(undefined)}>
+              {t.build.foodAuto}
+            </Chip>
           </div>
         </Section>
 
@@ -434,6 +554,15 @@ export default function BuildPlanPage() {
         </div>
       </div>
 
+      <StartPointSheet
+        open={startOpen}
+        onClose={() => setStartOpen(false)}
+        onPick={(start) => {
+          if (!start.fromDevice) setManual(start.label, start.location);
+        }}
+        onUseDevice={() => requestDevice()}
+        near={location?.location ?? null}
+      />
       <PlanningOverlay open={busy} phase={phase} />
     </>
   );

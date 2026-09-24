@@ -85,6 +85,7 @@ export function normalizePlanRequest(raw: unknown): PlanRequest {
 
   const budget = pick<BudgetPreset>(input.budget, BUDGETS, 'any');
   const budgetPerPerson = num(input.budgetPerPerson);
+  const budgetTotal = num(input.budgetTotal);
 
   const homeLat = num(input.homeLat);
   const homeLon = num(input.homeLon);
@@ -118,15 +119,24 @@ export function normalizePlanRequest(raw: unknown): PlanRequest {
       typeof input.originLabel === 'string' && input.originLabel.trim()
         ? input.originLabel.trim().slice(0, 80)
         : 'Dein Standort',
+    originFromDevice: input.originFromDevice === true ? true : undefined,
     startISO,
     availableMinutes,
     party,
-    groupSize: Math.max(1, Math.min(20, Math.round(num(input.groupSize) ?? defaultGroupSize(party)))),
+    groupSize: Math.max(1, Math.min(50, Math.round(num(input.groupSize) ?? defaultGroupSize(party)))),
     budget,
     budgetPerPerson:
       budgetPerPerson !== undefined && budgetPerPerson >= 0
         ? Math.min(1000, budgetPerPerson)
         : undefined,
+    budgetTotal:
+      budgetTotal !== undefined && budgetTotal >= 0 ? Math.min(10_000, budgetTotal) : undefined,
+    wantsFood:
+      typeof input.wantsFood === 'boolean' ? input.wantsFood : undefined,
+    radiusBoost: (() => {
+      const b = num(input.radiusBoost);
+      return b !== undefined && b > 1 ? Math.min(3, b) : undefined;
+    })(),
     moods,
     mobility: pick<Mobility>(input.mobility, MOBILITIES, isTour ? 'walk' : 'transit'),
     mustBeHomeByISO: isoOrUndefined(input.mustBeHomeByISO),

@@ -9,6 +9,7 @@ import type {
   WeatherSlice,
 } from '@/types/domain';
 import type { DayPart } from '@/lib/time';
+import type { PlanIntent } from './intent';
 
 /** Alles, was die Engine zum Rechnen braucht – einmal aufgebaut, dann read-only. */
 export type PlanContext = {
@@ -24,6 +25,8 @@ export type PlanContext = {
   radiusMeters: number;
   /** Harte Obergrenze pro Person, falls gesetzt. */
   budgetCap?: number;
+  /** Strukturierte Absicht des Nutzers – Grundlage der Slot-Struktur. */
+  intent: PlanIntent;
   /** Nur bei Touren: Sehenswürdigkeiten, getrennt von den Ausgehorten. */
   sights?: Place[];
   /** Die Sehenswürdigkeiten konnten gerade nicht geladen werden. */
@@ -37,14 +40,26 @@ export type PlanContext = {
 
 /** Ein Slot ist eine Position im Plan mit erlaubten Kategorien. */
 export type Slot = {
-  /** Kategorien in absteigender Präferenz. */
+  /** Kategorien in absteigender Präferenz. Erste Wahl gewinnt im Ranking. */
   roles: Category[];
+  /**
+   * Breitere Auswahl, wenn sich der Slot sonst gar nicht füllen ließe.
+   * Nur Pflicht-Slots haben eine – optionale Slots entfallen lieber, als
+   * mit etwas gefüllt zu werden, das niemand wollte.
+   */
+  fallbackRoles?: Category[];
   /** Zielminuten für diesen Schritt (die tatsächliche Dauer kommt vom Ort). */
   targetMinutes: number;
   /** Slots, die notfalls entfallen dürfen. */
   optional: boolean;
   /** Rolle im Plan – nur für Begründungstexte. */
   label: 'food' | 'main' | 'secondary' | 'winddown';
+  /**
+   * Welchen Wunsch dieser Slot erfüllt. Ohne erfüllten Wunsch gehört eine
+   * Station nicht in den Plan – daran hängt auch der ehrliche Hinweis,
+   * wenn sich ein Wunsch nicht erfüllen ließ.
+   */
+  need?: 'food' | 'experience' | 'main' | 'extra' | 'winddown';
 };
 
 export type ScoringWeights = {
@@ -58,6 +73,8 @@ export type ScoringWeights = {
   role: number;
   deal: number;
   rating: number;
+  /** Wie gut der Ort zur Gruppengröße passt. */
+  group: number;
 };
 
 export type Candidate = {

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { PlanningOverlay } from '@/components/PlanningOverlay';
-import { LocationSheet } from '@/components/location/LocationSheet';
+import { StartPointSheet } from '@/components/location/StartPointSheet';
 import { MapPin } from '@/components/ui/icons';
 import {
   TimeField,
@@ -109,9 +109,14 @@ export default function EntdeckenPage() {
   }, [location?.location.lat, location?.location.lon]);
 
   async function tour(auswahl: Auswahl) {
-    if (!location) {
-      setSheetOpen(true);
-      return;
+    // Ohne Startpunkt keine Tour – erst GPS versuchen, dann fragen.
+    let start = location;
+    if (!start) {
+      start = await requestDevice();
+      if (!start) {
+        setSheetOpen(true);
+        return;
+      }
     }
     setBusy(auswahl.key);
     setPhase('orte');
@@ -128,9 +133,10 @@ export default function EntdeckenPage() {
     const anfrage = () =>
       requestPlanStreamed(
         {
-          lat: location.location.lat,
-          lon: location.location.lon,
-          originLabel: location.label,
+          lat: start.location.lat,
+          lon: start.location.lon,
+          originLabel: start.label,
+          originFromDevice: start.fromDevice,
           startISO: new Date().toISOString(),
           availableMinutes: minutes,
           startLocal: startAt ?? undefined,
@@ -328,11 +334,14 @@ export default function EntdeckenPage() {
         </p>
       </main>
 
-      <LocationSheet
+      <StartPointSheet
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
-        onPick={setManual}
-        onUseDevice={() => void requestDevice()}
+        onPick={(start) => {
+          if (!start.fromDevice) setManual(start.label, start.location);
+        }}
+        onUseDevice={() => requestDevice()}
+        near={location?.location ?? null}
       />
       <PlanningOverlay open={busy !== null} phase={phase} />
     </>

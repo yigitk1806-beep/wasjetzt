@@ -176,6 +176,12 @@ function Station({ step, currency, tzOffsetMin, onReplace, highlight, index = 0 
         <p className="mt-0.5 text-[0.8rem] text-ink-muted">
           {kind(t, step.place.kind)} · {price(t, step.price, currency)}
         </p>
+        {/* Adresse aus OpenStreetMap – nur, wenn sie dort auch steht. */}
+        {step.place.location.address ? (
+          <p className="mt-0.5 truncate text-[0.78rem] text-ink-faint">
+            📍 {step.place.location.address}
+          </p>
+        ) : null}
 
         {laedt ? (
           <div className="mt-2.5 space-y-1.5" aria-hidden>

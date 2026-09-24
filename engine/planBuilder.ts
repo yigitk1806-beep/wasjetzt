@@ -32,6 +32,7 @@ import { planSummary, planTitle, stepReason, tourSummary, tourTitle } from './na
 import { begruendung, note } from './texts';
 import { scorePlace, VARIANTS, variantByKey } from './scoring';
 import { buildSlots } from './slots';
+import { capPerPerson, deriveIntent } from './intent';
 import type { PlanContext, Slot, VariantProfile } from './types';
 import { weatherModeOf } from './weatherRules';
 
@@ -73,7 +74,10 @@ export async function createPlanContext(
   const isTour = request.mode === 'tour';
   const radiusMeters =
     overrides?.radiusMeters ??
-    (isTour ? tourRadiusMeters(request.availableMinutes) : searchRadiusMeters(request.mobility, request.availableMinutes));
+    // Hat der Nutzer zugestimmt, weiter weg zu suchen, gilt der größere Radius.
+    (isTour
+      ? tourRadiusMeters(request.availableMinutes)
+      : searchRadiusMeters(request.mobility, request.availableMinutes) * (request.radiusBoost ?? 1));
   // Die Vorhersage muss bis zum Ende des Plans reichen – auch wenn er erst
   // morgen Nachmittag stattfindet.
   const stunden = Math.min(
@@ -148,7 +152,8 @@ export async function createPlanContext(
     start,
     latestEnd,
     radiusMeters,
-    budgetCap: request.budgetPerPerson ?? BUDGET_CAPS[request.budget],
+    budgetCap: capPerPerson(request) ?? BUDGET_CAPS[request.budget],
+    intent: deriveIntent(resolved, tzOffsetMin, start),
     sights: sights ?? undefined,
     sightsUnavailable: isTour && sights === null,
     tzOffsetMin,
@@ -220,6 +225,8 @@ export function homeLeg(
 type BuildResult = {
   steps: PlanStep[];
   droppedSlots: number;
+  /** Wünsche, für die sich in der Nähe nichts Passendes fand. */
+  unerfuellt: NonNullable<Slot['need']>[];
 };
 
 function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
@@ -232,6 +239,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
   let location: Coordinates = ctx.request.origin;
   let spentMin = 0;
   let dropped = 0;
+  const unerfuellt: NonNullable<Slot['need']>[] = [];
   const usedReasons: string[] = [];
 
   for (let i = 0; i < slots.length; i += 1) {
@@ -255,6 +263,9 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
 
     if (!picked) {
       dropped += 1;
+      // Ein Pflichtwunsch, der sich nicht erfüllen ließ, wird später ehrlich
+      // benannt – statt ihn durch irgendeine andere Station zu ersetzen.
+      if (!slot.optional && slot.need) unerfuellt.push(slot.need);
       continue;
     }
 
@@ -267,7 +278,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
     spentMin += picked.step.price.perPerson?.min ?? 0;
   }
 
-  return { steps, droppedSlots: dropped };
+  return { steps, droppedSlots: dropped, unerfuellt };
 }
 
 export function reserveMinutesFor(ctx: PlanContext, isLast: boolean, from: Coordinates): number {
@@ -293,17 +304,83 @@ type PickInput = {
   usedReasons: string[];
   /** Orte, die zusätzlich ausgeschlossen werden (z. B. beim Ersetzen). */
   excludeIds?: Set<string>;
+  /** Höchstabstand vom Startpunkt – der gerade betrachtete Suchring. */
+  maxDistanceMeters?: number;
 };
 
 type Picked = { step: PlanStep; score: number };
 
-/** Sucht den besten Ort für einen Slot. Zwei Durchläufe: erst rollentreu, dann offen. */
+/**
+ * Suchringe um den Startpunkt. WasJetzt sucht zuerst das, was wirklich in
+ * der Nähe ist, und schaut erst weiter, wenn dort nichts Passendes liegt.
+ */
+const SUCHSTUFEN = [500, 1000, 2000];
+
+/**
+ * So weit darf ein Lückenfüller höchstens weg sein. Ein netter Ausklang drei
+ * Kilometer entfernt ist kein Gewinn – dann lieber ein Programmpunkt weniger.
+ */
+const FUELLER_MAX_M = 2500;
+
+/**
+ * Wie viel besser ein weiter entfernter Ort sein muss, um einen näheren zu
+ * verdrängen. Sind beide ähnlich gut, gewinnt der nähere.
+ */
+const NAH_TOLERANZ = 0.9;
+
+/**
+ * Sucht den besten Ort für einen Slot – erst rollentreu, dann offen, und
+ * innerhalb beider Durchläufe von innen nach außen.
+ */
 function pickForSlot(input: PickInput): Picked | null {
-  const strict = pickFromPool(input, input.slot.roles);
+  const strict = ringweise(input, input.slot.roles);
   if (strict) return strict;
-  // Zweiter Versuch: Rollen aufweichen, damit der Nutzer trotzdem etwas bekommt.
-  const relaxed = pickFromPool(input, undefined);
-  return relaxed;
+
+  // Optionale Slots werden nicht aufgeweicht. Eine Station, die keinen
+  // geäußerten Wunsch erfüllt, macht den Plan nicht besser – sie macht ihn
+  // nur länger. Lieber zwei sehr passende Stationen als vier mittelmäßige.
+  if (input.slot.optional || !input.slot.fallbackRoles) return null;
+
+  return ringweise(input, input.slot.fallbackRoles, true);
+}
+
+/**
+ * Geht die Ringe von innen nach außen durch und nimmt den nächstgelegenen
+ * Treffer, der nicht deutlich schlechter ist als der beste aller Ringe.
+ */
+function ringweise(input: PickInput, roles: Category[], aufgeweicht = false): Picked | null {
+  const kandidaten = ringe(input.ctx, input.slot).map((grenze) =>
+    pickFromPool({ ...input, maxDistanceMeters: grenze }, roles, aufgeweicht),
+  );
+
+  let bester: Picked | null = null;
+  for (const kandidat of kandidaten) {
+    if (kandidat && (!bester || kandidat.score > bester.score)) bester = kandidat;
+  }
+  if (!bester) return null;
+
+  const nah = kandidaten.find((k) => k && k.score >= bester!.score - NAH_TOLERANZ);
+  return nah ?? bester;
+}
+
+/**
+ * Die Ringe für diesen Slot. Was der Nutzer ausdrücklich will, darf bis an den
+ * Rand des Suchradius liegen – eine Bowlingbahn gibt es nicht an jeder Ecke.
+ * Lückenfüller bleiben in der Nähe.
+ */
+function ringe(ctx: PlanContext, slot: Slot): number[] {
+  const radius = ctx.radiusMeters;
+  const gewuenscht =
+    ctx.request.singleActivity ||
+    slot.label === 'main' ||
+    slot.label === 'food' ||
+    slot.need === 'experience' ||
+    (ctx.request.focusCategory !== undefined && slot.roles.includes(ctx.request.focusCategory));
+  const aussen = gewuenscht ? radius : Math.min(radius, FUELLER_MAX_M);
+
+  const stufen = SUCHSTUFEN.filter((stufe) => stufe < aussen);
+  stufen.push(aussen);
+  return stufen;
 }
 
 /** Arten, bei denen ein kürzerer Besuch dasselbe Erlebnis ist. */
@@ -342,15 +419,24 @@ function abwechslungOk(category: Category, input: PickInput, aufgeweicht: boolea
   return true;
 }
 
-function pickFromPool(input: PickInput, roles: Category[] | undefined): Picked | null {
+function pickFromPool(
+  input: PickInput,
+  roles: Category[],
+  aufgeweicht = false,
+): Picked | null {
   const { ctx, slot, profile, cursor, location, spentMin } = input;
   let best: Picked | null = null;
 
   for (const place of ctx.pool) {
     if (input.usedPlaceIds.has(place.id)) continue;
     if (input.excludeIds?.has(place.id)) continue;
-    if (roles && !roles.includes(place.category)) continue;
-    if (!abwechslungOk(place.category, input, roles === undefined)) continue;
+    if (!roles.includes(place.category)) continue;
+    if (!abwechslungOk(place.category, input, aufgeweicht)) continue;
+
+    // Der Ring gilt ab dem Startpunkt: Ein Plan soll in der Gegend bleiben,
+    // in der der Nutzer gerade ist – nicht Schritt für Schritt abwandern.
+    const vomStart = haversineMeters(ctx.request.origin, place.location);
+    if (input.maxDistanceMeters !== undefined && vomStart > input.maxDistanceMeters) continue;
 
     const distanceMeters = haversineMeters(location, place.location);
     const travelMin =
@@ -392,7 +478,10 @@ function pickFromPool(input: PickInput, roles: Category[] | undefined): Picked |
     // Wer deutlich länger dauert als geplant, wird leicht abgewertet.
     const overrun = Math.max(0, durationMin - slot.targetMinutes - 20);
     const travelPenalty = travelMin > 25 ? (travelMin - 25) / 25 : 0;
-    const total = scored.total - (overrun / 60) * 0.8 - travelPenalty * 0.6;
+    // Feiner Ausschlag zugunsten der Nähe: Bei sonst gleichem Ergebnis
+    // gewinnt der nähere Ort (0,01 Punkte je Kilometer).
+    const total =
+      scored.total - (overrun / 60) * 0.8 - travelPenalty * 0.6 - vomStart / 100_000;
 
     if (!best || total > best.score) {
       const endISO = new Date(startAt.getTime() + durationMin * 60_000).toISOString();
@@ -429,7 +518,12 @@ export function roundToFive(date: Date): Date {
   return d;
 }
 
-function buildNotes(ctx: PlanContext, steps: PlanStep[], dropped: number): PlanNote[] {
+function buildNotes(
+  ctx: PlanContext,
+  steps: PlanStep[],
+  dropped: number,
+  unerfuellt: NonNullable<Slot['need']>[] = [],
+): PlanNote[] {
   const notes: PlanNote[] = [];
   // Maßgeblich ist das Wetter während des Plans, nicht das beim Erstellen.
   const nassZu = (s: PlanStep) => weatherModeOf(weatherAt(ctx.weather, s.startISO)) === 'wet';
@@ -458,7 +552,7 @@ function buildNotes(ctx: PlanContext, steps: PlanStep[], dropped: number): PlanN
     notes.push(note(ctx, 'time', 'homeIncluded'));
   }
 
-  const cost = aggregateCost(steps.map((s) => s.price));
+  const cost = aggregateCost(steps.map((s) => s.price), ctx.request.groupSize);
   if (ctx.budgetCap !== undefined && cost.perPerson && cost.perPerson.max > ctx.budgetCap) {
     notes.push(note(ctx, 'budget', 'overBudget'));
   }
@@ -468,7 +562,13 @@ function buildNotes(ctx: PlanContext, steps: PlanStep[], dropped: number): PlanN
     notes.push(note(ctx, 'availability', 'unknownHours', { count: unknownHours }));
   }
 
-  if (dropped > 0 && steps.length > 0) {
+  // Ein Wunsch, der sich nicht erfüllen ließ, wird benannt – nicht durch
+  // eine beliebige andere Station kaschiert.
+  if (unerfuellt.includes('experience')) {
+    notes.push(note(ctx, 'availability', 'noAction'));
+  } else if (unerfuellt.includes('food')) {
+    notes.push(note(ctx, 'availability', 'noFood'));
+  } else if (dropped > 0 && steps.length > 0) {
     notes.push(note(ctx, 'availability', 'droppedSlot'));
   }
 
@@ -480,7 +580,7 @@ export function buildPlan(
   variant: PlanVariantKey = 'balanced',
 ): Plan | null {
   const profile = variantByKey(variant);
-  let { steps, droppedSlots } = buildSteps(ctx, profile);
+  let { steps, droppedSlots, unerfuellt } = buildSteps(ctx, profile);
 
   // Früh am Morgen hat kaum etwas offen. Statt aufzugeben, wird der Beginn
   // stundenweise verschoben – solange noch Zeit im Budget bleibt.
@@ -489,14 +589,14 @@ export function buildPlan(
     verschobenUm += 1;
     const start = new Date(ctx.start.getTime() + verschobenUm * 60 * 60_000);
     if (start >= ctx.latestEnd) break;
-    ({ steps, droppedSlots } = buildSteps(
+    ({ steps, droppedSlots, unerfuellt } = buildSteps(
       { ...ctx, start, dayPart: dayPartOf(start, ctx.tzOffsetMin) },
       profile,
     ));
   }
 
   if (steps.length === 0) return null;
-  const plan = assemblePlan(ctx, steps, profile.key, droppedSlots);
+  const plan = assemblePlan(ctx, steps, profile.key, droppedSlots, undefined, unerfuellt);
   if (verschobenUm > 0) {
     plan.notes.unshift(
       note(ctx, 'time', 'lateStart', { time: formatClock(steps[0].startISO, 'de', ctx.tzOffsetMin) }),
@@ -513,10 +613,11 @@ export function assemblePlan(
   existing?: Partial<
     Pick<Plan, 'id' | 'shareCode' | 'participants' | 'meetingPoint' | 'createdAtISO' | 'siblings'>
   >,
+  unerfuellt: NonNullable<Slot['need']>[] = [],
 ): Plan {
   const startISO = steps[0].startISO;
   const endISO = steps[steps.length - 1].endISO;
-  const cost = aggregateCost(steps.map((s) => s.price));
+  const cost = aggregateCost(steps.map((s) => s.price), ctx.request.groupSize);
   const isTour = ctx.request.mode === 'tour';
 
   // Abfahrt: die gewählte Startzeit. Hat die Engine den Beginn verschoben
@@ -564,7 +665,7 @@ export function assemblePlan(
     // der Regen von jetzt.
     weatherAtCreation: weatherAt(ctx.weather, departISO) ?? ctx.weather.now ?? null,
     createdAtISO: existing?.createdAtISO ?? new Date().toISOString(),
-    notes: buildNotes(ctx, steps, droppedSlots),
+    notes: buildNotes(ctx, steps, droppedSlots, unerfuellt),
     meetingPoint: existing?.meetingPoint,
     participants: existing?.participants ?? [],
     containsMockData: steps.some((s) => s.place.source === 'mock'),

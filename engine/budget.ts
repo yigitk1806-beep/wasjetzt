@@ -16,16 +16,16 @@ export const BUDGET_MAX_LEVEL: Record<BudgetPreset, PriceLevel> = {
  * Preis mitbringt. Sobald auch nur einer geschätzt ist, gibt es ausschließlich
  * das Niveau – sonst entstünde aus Schätzungen eine Scheingenauigkeit.
  */
-export function aggregateCost(prices: PriceInfo[]): PlanCost {
+export function aggregateCost(prices: PriceInfo[], groupSize = 1): PlanCost {
   if (prices.length === 0) {
-    return { level: 0, levelEstimated: false };
+    return { level: 0, levelEstimated: false, groupSize };
   }
 
   const level = Math.max(...prices.map((p) => p.level)) as PriceLevel;
   const levelEstimated = prices.some((p) => p.levelEstimated);
 
   const allHaveAmounts = prices.every((p) => p.perPerson !== undefined);
-  if (!allHaveAmounts) return { level, levelEstimated };
+  if (!allHaveAmounts) return { level, levelEstimated, groupSize };
 
   const perPerson = prices.reduce(
     (acc, p) => ({
@@ -35,5 +35,9 @@ export function aggregateCost(prices: PriceInfo[]): PlanCost {
     { min: 0, max: 0 },
   );
 
-  return { level, levelEstimated, perPerson };
+  // Gesamtsumme nur dort, wo jeder Einzelpreis echt ist – aus Schätzungen
+  // entstünde sonst eine Zahl, die nach Gewissheit aussieht.
+  const total = { min: perPerson.min * groupSize, max: perPerson.max * groupSize };
+
+  return { level, levelEstimated, perPerson, total, groupSize };
 }

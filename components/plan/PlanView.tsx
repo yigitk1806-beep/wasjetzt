@@ -20,10 +20,14 @@ import { GroupPanel } from './GroupPanel';
 import { FeedbackSheet } from './FeedbackSheet';
 import { PlanHeader } from './PlanHeader';
 import { TimeSheet } from './TimeSheet';
+import { StartPointBar, startLabel } from './StartPointBar';
+import { StartPointSheet, type StartPoint } from '@/components/location/StartPointSheet';
+import { PlanningOverlay } from '@/components/PlanningOverlay';
 import { recordPlanStarted, recordRejection } from '@/lib/clientStore';
 import { useLocale } from '@/components/LocaleProvider';
+import { useLocation } from '@/hooks/useLocation';
 import { errorText, noteText } from '@/lib/i18n/format';
-import { replacePlanStep } from '@/lib/planClient';
+import { replacePlanStep, replanFrom, type PlanPhase } from '@/lib/planClient';
 import type { Plan, PlanStep } from '@/types/domain';
 
 type Props = { initialPlan: Plan };
@@ -40,6 +44,11 @@ export function PlanView({ initialPlan }: Props) {
   const [weatherAlert, setWeatherAlert] = useState<{ stepIds: string[] } | null>(null);
   const [adjusting, setAdjusting] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
+  const [startOpen, setStartOpen] = useState(false);
+  const [replanPhase, setReplanPhase] = useState<PlanPhase | null>(null);
+  const [replanning, setReplanning] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const { setManual, requestDevice } = useLocation();
 
   // Wetterwache: prüft beim Öffnen und danach alle 10 Minuten.
   useEffect(() => {
@@ -102,6 +111,58 @@ export function PlanView({ initialPlan }: Props) {
     setStarted(true);
   }
 
+  /** Nochmal suchen, diesmal mit doppeltem Umkreis. */
+  const widerSuchen = useCallback(async () => {
+    setReplanning(true);
+    setReplanPhase(null);
+    setStartError(null);
+
+    const response = await replanFrom(
+      plan,
+      {
+        label: plan.request.originLabel,
+        location: plan.request.origin,
+        fromDevice: plan.request.originFromDevice === true,
+      },
+      setReplanPhase,
+      { radiusBoost: 2 },
+    );
+    setReplanning(false);
+    setReplanPhase(null);
+
+    if (response.plan) {
+      router.push(`/plan/${response.plan.id}`);
+      return;
+    }
+    setStartError(errorText(t, response));
+  }, [plan, router, t]);
+
+  /**
+   * Neuer Startpunkt heißt neuer Plan: Der Server sucht Orte um den neuen
+   * Punkt, ordnet sie neu, rechnet Wege und Zeiten neu und legt bei gesetzter
+   * Heimkehrzeit auch den Rückweg neu. Ein bloßes Umbenennen wäre gelogen.
+   */
+  const changeStart = useCallback(
+    async (next: StartPoint) => {
+      // Beim GPS-Weg ist der Standort schon gespeichert.
+      if (!next.fromDevice) setManual(next.label, next.location);
+      setReplanning(true);
+      setReplanPhase(null);
+      setStartError(null);
+
+      const response = await replanFrom(plan, next, setReplanPhase);
+      setReplanning(false);
+      setReplanPhase(null);
+
+      if (response.plan) {
+        router.push(`/plan/${response.plan.id}`);
+        return;
+      }
+      setStartError(errorText(t, response));
+    },
+    [plan, router, setManual, t],
+  );
+
   return (
     <>
       <header className="shell safe-top flex items-center justify-between pt-3">
@@ -132,6 +193,16 @@ export function PlanView({ initialPlan }: Props) {
 
       <main className="shell space-y-5 pb-28 pt-3">
         <PlanHeader plan={plan} onTimeClick={() => setTimeOpen(true)} />
+
+        <StartPointBar
+          request={plan.request}
+          busy={replanning}
+          onChange={() => setStartOpen(true)}
+        />
+
+        {startError ? (
+          <p className="rounded-2xl bg-brand-50 px-4 py-3 text-[0.87rem] text-brand-700">{startError}</p>
+        ) : null}
 
         <AnimatePresence>
           {weatherAlert ? (
@@ -182,6 +253,7 @@ export function PlanView({ initialPlan }: Props) {
           mobility={plan.request.mobility}
           returnHome={plan.returnHome}
           home={plan.request.homeLocation}
+          originLabel={startLabel(t, plan.request)}
         />
 
         {plan.notes.length > 0 ? (
@@ -192,7 +264,21 @@ export function PlanView({ initialPlan }: Props) {
                 className="flex gap-2 rounded-2xl bg-canvas-sunk px-3.5 py-2.5 text-[0.84rem] text-ink-soft"
               >
                 <span aria-hidden>{NOTE_EMOJI[note.kind]}</span>
-                <span>{noteText(t, note)}</span>
+                <span className="flex-1">
+                  {noteText(t, note)}
+                  {/* Statt irgendetwas einzubauen: fragen, ob weiter gesucht
+                      werden soll. Die Entscheidung bleibt beim Nutzer. */}
+                  {note.key === 'noAction' && !plan.request.radiusBoost ? (
+                    <button
+                      type="button"
+                      onClick={() => void widerSuchen()}
+                      disabled={replanning}
+                      className="tap ml-1.5 font-semibold text-brand-600 underline underline-offset-2 disabled:opacity-60"
+                    >
+                      {t.plan.widen}
+                    </button>
+                  ) : null}
+                </span>
               </li>
             ))}
           </ul>
@@ -258,6 +344,14 @@ export function PlanView({ initialPlan }: Props) {
       <ShareSheet plan={plan} open={shareOpen} onClose={() => setShareOpen(false)} />
       <TimeSheet plan={plan} open={timeOpen} onClose={() => setTimeOpen(false)} onPlanChange={setPlan} />
       <FeedbackSheet plan={plan} open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+      <StartPointSheet
+        open={startOpen}
+        onClose={() => setStartOpen(false)}
+        onPick={(next) => void changeStart(next)}
+        onUseDevice={() => requestDevice()}
+        near={plan.request.origin}
+      />
+      <PlanningOverlay open={replanning} phase={replanPhase} />
     </>
   );
 }

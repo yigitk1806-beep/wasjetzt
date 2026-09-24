@@ -305,8 +305,12 @@ export type PlanCost = {
   level: PriceLevel;
   /** true, wenn mindestens ein Schritt nur ein geschätztes Niveau hat. */
   levelEstimated: boolean;
-  /** Summe, nur wenn für JEDEN Schritt ein echter Betrag vorliegt. */
+  /** Summe pro Person, nur wenn für JEDEN Schritt ein echter Betrag vorliegt. */
   perPerson?: { min: number; max: number };
+  /** Summe für die ganze Gruppe – dasselbe mal Personenzahl. */
+  total?: { min: number; max: number };
+  /** Personenzahl, auf die sich `total` bezieht. */
+  groupSize?: number;
 };
 
 export type PlanNote = {
@@ -343,8 +347,10 @@ export type BudgetPreset = 'free' | 'low' | 'medium' | 'high' | 'any';
 
 export type PlanRequest = {
   origin: Coordinates;
-  /** Anzeigename des Startorts, z. B. "Dein Standort" oder eine Stadt. */
+  /** Anzeigename des Startorts, z. B. eine Adresse oder eine Stadt. */
   originLabel: string;
+  /** true = per GPS ermittelt. Dann steht statt einer Adresse "dein aktueller Standort". */
+  originFromDevice?: boolean;
   /** ISO – Startzeitpunkt der Planung. */
   startISO: string;
   /** Verfügbare Zeit in Minuten. */
@@ -354,6 +360,21 @@ export type PlanRequest = {
   budget: BudgetPreset;
   /** Optionales hartes Limit pro Person. */
   budgetPerPerson?: number;
+  /**
+   * Gesamtbudget der Gruppe. „2 Personen · 100 €" heißt 100 € für den Abend,
+   * nicht 100 € je Kopf – die Engine teilt intern durch die Personenzahl.
+   */
+  budgetTotal?: number;
+  /**
+   * Soll Essen Teil des Plans sein? Die ausdrückliche Antwort schlägt die
+   * Uhrzeit-Heuristik; ohne Angabe entscheidet weiter die Tageszeit.
+   */
+  wantsFood?: boolean;
+  /**
+   * Größerer Suchradius, wenn in der Nähe nichts Passendes lag – der Nutzer
+   * hat dem ausdrücklich zugestimmt. 1 = normal, 2 = doppelt.
+   */
+  radiusBoost?: number;
   moods: Mood[];
   mobility: Mobility;
   /** ISO – "wir müssen um X zuhause sein". */
@@ -413,6 +434,8 @@ export type UserPreferences = {
   age?: number;
   language: string;
   homeLocation?: Coordinates;
+  /** Anzeigename des Zuhauses, z. B. "Müllerstraße 120, 13349 Berlin". */
+  homeLabel?: string;
   shareLocationLive: boolean;
 };
 

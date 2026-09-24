@@ -69,7 +69,7 @@ const SIGHTS_RADIUS_M = 2500;
 const SIGHTS_LIMIT = 500;
 
 /** Erhöhen, sobald sich ändert, welche Orte wie eingeordnet werden. */
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v8';
 
 /**
  * Zellgröße des Caches je Stufe. Die nahe Stufe braucht ein feines Raster
@@ -580,7 +580,11 @@ function addressOf(tags: OsmTags): string | undefined {
   const street = tags['addr:street'];
   if (!street) return undefined;
   const number = tags['addr:housenumber'];
-  return number ? `${street} ${number}` : street;
+  const strasse = number ? `${street} ${number}` : street;
+
+  // Postleitzahl und Ort nur, wenn OSM sie wirklich hat – nichts ergänzen.
+  const ort = [tags['addr:postcode'], tags['addr:city']].filter(Boolean).join(' ');
+  return ort ? `${strasse}, ${ort}` : strasse;
 }
 
 /**

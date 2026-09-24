@@ -8,12 +8,20 @@ export type PlanRequestInput = {
   lat: number;
   lon: number;
   originLabel?: string;
+  /** true = Startpunkt kommt vom GPS des Geräts. */
+  originFromDevice?: boolean;
   startISO?: string;
   availableMinutes?: number;
   party?: Party;
   groupSize?: number;
   budget?: 'free' | 'low' | 'medium' | 'high' | 'any';
   budgetPerPerson?: number;
+  /** Gesamtbudget der Gruppe – nicht pro Kopf. */
+  budgetTotal?: number;
+  /** Soll Essen Teil des Plans sein? undefined = die Uhrzeit entscheidet. */
+  wantsFood?: boolean;
+  /** Größerer Suchradius, nachdem der Nutzer zugestimmt hat. */
+  radiusBoost?: number;
   moods?: Mood[];
   mobility?: Mobility;
   mustBeHomeByISO?: string;
@@ -127,6 +135,53 @@ function bodyFor(
     mobility: input.mobility ?? preferences.defaultMobility,
     preferences,
   };
+}
+
+/**
+ * Denselben Wunsch von einem anderen Startpunkt aus neu planen.
+ *
+ * Es wird nicht nur die Karte umgezeichnet: Reihenfolge, Erreichbarkeit,
+ * Zeiten und der Rückweg entstehen neu – der Plan beginnt wirklich dort.
+ * Alles andere (Zeitfenster, Laune, Budget, Fortbewegung, Wunschkategorie)
+ * bleibt so, wie der Nutzer es gewählt hat.
+ */
+export async function replanFrom(
+  plan: Plan,
+  start: { label: string; location: { lat: number; lon: number }; fromDevice: boolean },
+  onPhase: (phase: PlanPhase) => void,
+  extra?: Partial<PlanRequestInput>,
+): Promise<PlanResponse> {
+  const r = plan.request;
+  return requestPlanStreamed(
+    {
+      lat: start.location.lat,
+      lon: start.location.lon,
+      originLabel: start.label,
+      originFromDevice: start.fromDevice,
+      startISO: new Date().toISOString(),
+      availableMinutes: r.availableMinutes,
+      party: r.party,
+      groupSize: r.groupSize,
+      budget: r.budget,
+      budgetPerPerson: r.budgetPerPerson,
+      budgetTotal: r.budgetTotal,
+      wantsFood: r.wantsFood,
+      radiusBoost: r.radiusBoost,
+      moods: r.moods,
+      mobility: r.mobility,
+      startLocal: r.startLocal,
+      homeByLocal: r.homeByLocal,
+      singleActivity: r.singleActivity,
+      preferNovelty: r.preferNovelty,
+      focusCategory: r.focusCategory,
+      rawText: r.rawText,
+      touristMode: r.touristMode,
+      mode: r.mode,
+      interests: r.interests,
+      ...extra,
+    },
+    onPhase,
+  );
 }
 
 /** Einziger Einstiegspunkt der UI in die Planung. */

@@ -29,14 +29,14 @@ export function useLocation() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const requestDevice = useCallback(async (showLoading: boolean) => {
+  const requestDevice = useCallback(async (showLoading: boolean): Promise<StoredLocation | null> => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setStatus((prev) => (prev === 'ready' ? prev : 'unavailable'));
-      return;
+      return null;
     }
     if (showLoading) setStatus('locating');
 
-    return new Promise<void>((resolve) => {
+    return new Promise<StoredLocation | null>((resolve) => {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const next: StoredLocation = {
@@ -51,18 +51,18 @@ export function useLocation() {
           saveLocation(next);
           setLocation(next);
           setStatus('ready');
-          resolve();
+          resolve(next);
         },
         () => {
           setStatus((prev) => (prev === 'ready' ? prev : 'unavailable'));
-          resolve();
+          resolve(null);
         },
         { enableHighAccuracy: false, timeout: 8000, maximumAge: 10 * 60 * 1000 },
       );
     });
   }, []);
 
-  const setManual = useCallback((label: string, coords: Coordinates) => {
+  const setManual = useCallback((label: string, coords: Coordinates): StoredLocation => {
     const next: StoredLocation = {
       label,
       location: coords,
@@ -72,6 +72,7 @@ export function useLocation() {
     saveLocation(next);
     setLocation(next);
     setStatus('ready');
+    return next;
   }, []);
 
   const forget = useCallback(() => {

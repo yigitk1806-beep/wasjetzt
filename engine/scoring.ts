@@ -1,19 +1,28 @@
-import type { Category, Mood, Place, WeatherSlice } from '@/types/domain';
+import type { Category, Mobility, Mood, Place, WeatherSlice } from '@/types/domain';
 import { BUDGET_MAX_LEVEL } from './budget';
 import type { PlanContext, ScoringWeights, Slot, VariantProfile } from './types';
+
+/** Arten, an denen man nichts *tut* – als "Action" ungeeignet. */
+const PASSIV = new Set<Category>(['nature', 'shopping', 'cafe', 'wellness']);
 import { seasonCategoryBoost, seasonFit, weatherFit, weatherModeOf } from './weatherRules';
 
+/**
+ * Gewichte des Rankings. Nähe zählt bewusst schwer: WasJetzt verspricht, was
+ * *hier* gerade sinnvoll ist – nicht den theoretisch besten Ort der Stadt.
+ */
 export const BASE_WEIGHTS: ScoringWeights = {
   mood: 1.25,
-  distance: 0.9,
+  distance: 1.8,
   price: 0.7,
   weather: 1.1,
   season: 0.45,
   novelty: 0.55,
   preference: 0.9,
-  role: 0.8,
+  // Die Rolle wiegt schwer: Wer Action will, soll Action bekommen.
+  role: 1.5,
   deal: 0.25,
   rating: 0.35,
+  group: 0.7,
 };
 
 export const VARIANTS: VariantProfile[] = [
@@ -28,7 +37,7 @@ export const VARIANTS: VariantProfile[] = [
     key: 'romantic',
     title: 'Romantisch',
     emoji: '❤️',
-    weights: { mood: 1.1, distance: 1.0, price: 0.4 },
+    weights: { mood: 1.1, distance: 1.9, price: 0.4 },
     bias: { romantic: 1.3, chill: 0.4, action: -0.4, social: -0.2 },
   },
   {
@@ -42,7 +51,7 @@ export const VARIANTS: VariantProfile[] = [
     key: 'cheap',
     title: 'Günstig',
     emoji: '💸',
-    weights: { price: 2.2, distance: 1.2 },
+    weights: { price: 2.2, distance: 2.1 },
     bias: {},
     maxPriceLevel: 1,
   },
@@ -85,11 +94,35 @@ function moodScore(place: Place, moods: Mood[]): number {
   return parts.reduce((a, b) => a + b, 0) / parts.length;
 }
 
-/** 0..1 – nah ist besser, aber nicht linear: die ersten Meter tun nicht weh. */
-function distanceScore(distanceMeters: number, radiusMeters: number, sensitivity: number): number {
-  const ratio = Math.min(1, distanceMeters / Math.max(300, radiusMeters));
-  const curved = 1 - ratio ** 1.6;
-  return curved * (0.55 + sensitivity * 0.45) + (1 - sensitivity) * 0.25 * (1 - ratio);
+/**
+ * Entfernung, die sich mit dem jeweiligen Verkehrsmittel noch „gleich um die
+ * Ecke" anfühlt. Bis hierhin kostet ein Ort kaum Punkte, danach fällt er
+ * deutlich ab.
+ *
+ * Gemessen wird bewusst hieran und nicht am Suchradius: Sonst wäre für einen
+ * Bus-und-Bahn-Nutzer (Radius 9 km) ein Lokal in 3 km Entfernung „nah" – und
+ * das Café zwei Straßen weiter hätte keinen Vorteil mehr.
+ */
+const WOHLFUEHL_METER: Record<Mobility, number> = {
+  walk: 700,
+  bike: 2000,
+  transit: 2500,
+  car: 4000,
+};
+
+/**
+ * 0..1 – nah ist deutlich besser. Innerhalb der Wohlfühlentfernung bleibt der
+ * Wert hoch, danach fällt er steil: Ein Ort in dreifacher Entfernung muss
+ * schon inhaltlich klar besser sein, um zu gewinnen.
+ */
+function distanceScore(distanceMeters: number, ctx: PlanContext, sensitivity: number): number {
+  const wohl = WOHLFUEHL_METER[ctx.request.mobility];
+  const ratio = distanceMeters / wohl;
+  // Glockenähnlicher Abfall: 1 bei 0 m, ~0,74 bei Wohlfühlentfernung,
+  // ~0,3 beim Doppelten, nahe 0 beim Vierfachen.
+  const basis = 1 / (1 + ratio ** 2 * 0.55);
+  // Wer empfindlich auf Wege reagiert, bekommt den Abfall noch stärker.
+  return basis ** (0.75 + sensitivity * 0.75);
 }
 
 /** 0..1 – passt der Preis zum Budget. */
@@ -126,12 +159,44 @@ function preferenceScore(place: Place, ctx: PlanContext): number {
   return Math.max(-1, Math.min(1, like - dislike));
 }
 
-/** 0..1 – wie gut passt der Ort zur Rolle dieses Slots. */
+/**
+ * 0..1 – wie gut passt der Ort zur Rolle dieses Slots.
+ *
+ * Die Reihenfolge der Rollen ist Bedeutung, nicht Aufzählung: Steht
+ * „activity" vorn und „nature" hinten, muss ein Park inhaltlich deutlich
+ * besser sein, um eine Bowlingbahn zu verdrängen.
+ */
 function roleScore(place: Place, slot: Slot): number {
   const index = slot.roles.indexOf(place.category);
   if (index < 0) return 0;
-  return Math.max(0.35, 1 - index * 0.18);
+  return Math.max(0.15, 1 - index * 0.3);
 }
+
+/**
+ * Passt der Ort zur Gruppengröße?
+ *
+ * Wir kennen keine Sitzplatzzahlen – deshalb wird nichts behauptet, sondern
+ * nur gewichtet: Große Gruppen bekommen eher Orte, die für Gruppen gemacht
+ * sind (Bowling, Minigolf, Restaurant), kleine eher Orte, die zu zweit
+ * funktionieren. Ein Eiscafé für acht Leute ist keine Zusage wert.
+ */
+function groupScore(place: Place, groupSize: number): number {
+  if (groupSize <= 2) {
+    // Zu zweit: Intimität schlägt Gruppentauglichkeit, aber nur leicht.
+    return 0.55 + place.scores.romantic * 0.3 + place.scores.chill * 0.15;
+  }
+  const gruppentauglich = place.scores.social;
+  if (groupSize >= 5) {
+    // Ab fünf Leuten zählt Gruppentauglichkeit stark; sehr kleine Formate
+    // (Eisdiele, Aussichtspunkt) verlieren spürbar.
+    const klein = KLEINE_FORMATE.has(place.category) ? 0.25 : 0;
+    return Math.max(0, gruppentauglich - klein);
+  }
+  return 0.4 + gruppentauglich * 0.6;
+}
+
+/** Arten, die in großer Gruppe selten funktionieren. */
+const KLEINE_FORMATE = new Set<Category>(['cafe', 'wellness']);
 
 function partyScore(place: Place, ctx: PlanContext): number {
   switch (ctx.request.party) {
@@ -170,13 +235,14 @@ export function scorePlace(input: ScoreInput): ScoreResult {
   const w = weightsFor(profile);
 
   const mood = moodScore(place, ctx.request.moods) * 0.65 + partyScore(place, ctx) * 0.35;
-  const distance = distanceScore(distanceMeters, ctx.radiusMeters, ctx.preferences.distanceSensitivity);
+  const distance = distanceScore(distanceMeters, ctx, ctx.preferences.distanceSensitivity);
   const price = priceScore(place, ctx);
   const weather = weatherFit(place, weatherAtStart);
   const season = seasonFit(place, ctx.season) + seasonCategoryBoost(place.category, ctx.season);
   const novelty = noveltyScore(place, ctx);
   const preference = preferenceScore(place, ctx);
   const role = roleScore(place, slot);
+  const group = groupScore(place, ctx.request.groupSize);
   const deal = place.deal ? 1 : 0;
   // Bewertungen fließen nur ein, wenn eine echte Quelle sie geliefert hat.
   const rating = place.rating !== undefined ? place.rating / 5 : 0;
@@ -190,6 +256,7 @@ export function scorePlace(input: ScoreInput): ScoreResult {
     novelty * w.novelty +
     preference * w.preference +
     role * w.role +
+    group * w.group +
     deal * w.deal +
     rating * w.rating;
 
@@ -220,6 +287,20 @@ export function scorePlace(input: ScoreInput): ScoreResult {
     if (place.category === ctx.request.focusCategory) total += 1.6;
   }
 
+  // Wer Action will, meint etwas zu erleben: Bowling, Kart, Escape Room.
+  // Orte, an denen man nichts tut, sind dafür kein Ersatz.
+  if (slot.need === 'experience') {
+    total += place.scores.action * 1.4;
+    if (PASSIV.has(place.category)) total -= 1.5;
+  }
+
+  // Ein Park ist kein Allzweck-Füller. Er gewinnt, wenn jemand rausgehen,
+  // spazieren oder es ruhig angehen will – sonst nur, wenn sonst nichts da
+  // ist. Kostenlos und immer offen allein ist kein Grund.
+  if (place.category === 'nature' && !ctx.intent.outdoor && !ctx.intent.calm) {
+    total -= ctx.intent.experience ? 2.2 : 1.1;
+  }
+
   // Bei Regen indoor-lastige Kategorien zusätzlich anheben, bei Sonne outdoor.
   const mode = weatherModeOf(weatherAtStart);
   if (mode === 'wet' && place.indoorOutdoor === 'indoor') total += 0.5;
@@ -230,6 +311,8 @@ export function scorePlace(input: ScoreInput): ScoreResult {
 
   return {
     total,
-    breakdown: { mood, distance, price, weather, season, novelty, preference, role, deal, rating },
+    breakdown: {
+      mood, distance, price, weather, season, novelty, preference, role, group, deal, rating,
+    },
   };
 }

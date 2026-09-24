@@ -10,7 +10,7 @@ import { ActionCard } from '@/components/home/ActionCard';
 import { CategoryTiles } from '@/components/home/CategoryTiles';
 import { DiscoverCard } from '@/components/home/DiscoverCard';
 import { DealsStrip } from '@/components/home/DealsStrip';
-import { LocationSheet } from '@/components/location/LocationSheet';
+import { StartPointSheet } from '@/components/location/StartPointSheet';
 import { useLocale } from '@/components/LocaleProvider';
 import { useLocation } from '@/hooks/useLocation';
 import { useWeather } from '@/hooks/useWeather';
@@ -51,18 +51,28 @@ export default function HomePage() {
 
   const go = useCallback(
     async (extra: Partial<PlanRequestInput>) => {
-      if (!location) {
-        setSheetOpen(true);
-        return;
+      // „Jetzt los" heißt: keine Eingaben. Fehlt der Standort noch, wird er
+      // hier per GPS geholt; erst wenn das der Nutzer ablehnt, fragen wir.
+      let start = location;
+      if (!start) {
+        // Der Browser fragt selbst sichtbar nach – deshalb hier noch keine
+        // Ladeanzeige, die über den Dialog legen würde.
+        start = await requestDevice();
+        if (!start) {
+          setSheetOpen(true);
+          return;
+        }
       }
+
       setBusy(true);
       setPhase(null);
       setError(null);
 
       const response = await requestPlanStreamed({
-        lat: location.location.lat,
-        lon: location.location.lon,
-        originLabel: location.label,
+        lat: start.location.lat,
+        lon: start.location.lon,
+        originLabel: start.label,
+        originFromDevice: start.fromDevice,
         startISO: new Date().toISOString(),
         ...extra,
       }, setPhase);
@@ -76,10 +86,8 @@ export default function HomePage() {
       setPhase(null);
       setError(errorText(t, response));
     },
-    [location, router, t],
+    [location, requestDevice, router, t],
   );
-
-  const disabled = !location;
 
   return (
     <>
@@ -121,7 +129,6 @@ export default function HomePage() {
             hint={t.home.nowHint}
             primary
             delay={0.08}
-            disabled={disabled}
             onClick={() => void go({})}
           />
           <ActionCard
@@ -129,7 +136,6 @@ export default function HomePage() {
             title={t.home.build}
             hint={t.home.buildHint}
             delay={0.14}
-            disabled={disabled}
             onClick={() => router.push('/planen')}
           />
           <ActionCard
@@ -137,7 +143,6 @@ export default function HomePage() {
             title={t.home.surprise}
             hint={t.home.surpriseHint}
             delay={0.2}
-            disabled={disabled}
             onClick={() => void go({ surprise: true })}
           />
           <DiscoverCard delay={0.26} onClick={() => router.push('/entdecken')} />
@@ -170,7 +175,6 @@ export default function HomePage() {
         <section className="space-y-2.5">
           <h2 className="text-[0.95rem] font-bold tracking-tight">{t.home.nearby}</h2>
           <CategoryTiles
-            disabled={disabled}
             onPick={(category: Category) =>
               void go({ focusCategory: category, singleActivity: category === 'cafe' })
             }
@@ -208,11 +212,16 @@ export default function HomePage() {
         ) : null}
       </main>
 
-      <LocationSheet
+      <StartPointSheet
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
-        onPick={setManual}
-        onUseDevice={() => void requestDevice()}
+        // Der GPS-Weg hat den Standort schon gespeichert – nur manuelle
+        // Auswahl muss hier noch abgelegt werden.
+        onPick={(start) => {
+          if (!start.fromDevice) setManual(start.label, start.location);
+        }}
+        onUseDevice={() => requestDevice()}
+        near={location?.location ?? null}
       />
       <PlanningOverlay open={busy} phase={phase} />
     </>

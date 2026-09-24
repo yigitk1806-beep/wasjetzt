@@ -91,11 +91,16 @@ export type GeocodeResult = {
   location: Coordinates;
   country?: string;
   admin?: string;
+  /** Zweite Zeile, z. B. "13349 Berlin" – nur, wenn die Quelle sie liefert. */
+  detail?: string;
+  /** true = echte Adresse mit Hausnummer, nicht nur ein Ortsmittelpunkt. */
+  precise?: boolean;
 };
 
 export interface GeocodingProvider {
   readonly id: string;
-  search(query: string, locale?: string): Promise<GeocodeResult[]>;
+  /** `near` rückt Treffer in der Nähe nach vorn, etwa bei "Hauptstraße 5". */
+  search(query: string, locale?: string, near?: Coordinates): Promise<GeocodeResult[]>;
   reverse(at: Coordinates, locale?: string): Promise<GeocodeResult | null>;
 }
 
@@ -130,6 +135,10 @@ export type ParsedIntent = {
   groupSize?: number;
   budget?: import('@/types/domain').BudgetPreset;
   budgetPerPerson?: number;
+  /** Gesamtbudget der Gruppe – "100 €" ohne Zusatz meint die ganze Runde. */
+  budgetTotal?: number;
+  /** Ausdrücklicher Essenswunsch aus dem Freitext. */
+  wantsFood?: boolean;
   availableMinutes?: number;
   moods: import('@/types/domain').Mood[];
   mobility?: Mobility;

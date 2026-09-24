@@ -162,6 +162,40 @@ export const ACTIVITY_PROFILES = {
     bestSeasons: ['spring', 'summer'],
     scores: { romantic: 0.6, action: 0.5, family: 0.95, chill: 0.7, novelty: 0.5, social: 0.9 },
   },
+  karting: {
+    category: 'activity', kind: 'Kartbahn', emoji: '🏎️', priceLevel: 2,
+    typicalDurationMin: 90, indoorOutdoor: 'indoor', ...INDOOR, bestSeasons: [],
+    scores: { romantic: 0.35, action: 1, family: 0.7, chill: 0.05, novelty: 0.8, social: 0.9 },
+    bookable: true, minAge: 14,
+  },
+  lasertag: {
+    category: 'activity', kind: 'Lasertag', emoji: '🔫', priceLevel: 2,
+    typicalDurationMin: 80, indoorOutdoor: 'indoor', ...INDOOR, bestSeasons: [],
+    scores: { romantic: 0.25, action: 0.95, family: 0.8, chill: 0.05, novelty: 0.8, social: 0.95 },
+    bookable: true, minAge: 12,
+  },
+  trampoline: {
+    category: 'activity', kind: 'Trampolinpark', emoji: '🤸', priceLevel: 2,
+    typicalDurationMin: 90, indoorOutdoor: 'indoor', ...INDOOR, bestSeasons: [],
+    scores: { romantic: 0.2, action: 0.95, family: 0.95, chill: 0.1, novelty: 0.75, social: 0.9 },
+  },
+  paintball: {
+    category: 'activity', kind: 'Paintball', emoji: '🎯', priceLevel: 2,
+    typicalDurationMin: 150, indoorOutdoor: 'mixed', ...MIXED, bestSeasons: ['spring', 'summer', 'autumn'],
+    scores: { romantic: 0.1, action: 1, family: 0.4, chill: 0.05, novelty: 0.85, social: 0.95 },
+    bookable: true, minAge: 16,
+  },
+  axethrowing: {
+    category: 'activity', kind: 'Axtwerfen', emoji: '🪓', priceLevel: 2,
+    typicalDurationMin: 90, indoorOutdoor: 'indoor', ...INDOOR, bestSeasons: [],
+    scores: { romantic: 0.4, action: 0.9, family: 0.3, chill: 0.1, novelty: 0.95, social: 0.9 },
+    bookable: true, minAge: 18,
+  },
+  billiards: {
+    category: 'gaming', kind: 'Billard', emoji: '🎱', priceLevel: 1,
+    typicalDurationMin: 90, indoorOutdoor: 'indoor', ...INDOOR, bestSeasons: [],
+    scores: { romantic: 0.5, action: 0.5, family: 0.5, chill: 0.5, novelty: 0.45, social: 0.9 },
+  },
   karaoke: {
     category: 'activity', kind: 'Karaoke', emoji: '🎤', priceLevel: 2,
     typicalDurationMin: 90, indoorOutdoor: 'indoor', ...INDOOR, bestSeasons: [],

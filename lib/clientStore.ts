@@ -113,6 +113,21 @@ export function clearLocation() {
   }
 }
 
+// ---------------------------------------------------------------------- Zuhause
+
+export type StoredHome = { label: string; location: Coordinates };
+
+/** Das gespeicherte Zuhause – Startpunkt und Ziel des Rückwegs. */
+export function loadHome(): StoredHome | null {
+  const prefs = loadPreferences();
+  if (!prefs.homeLocation) return null;
+  return { label: prefs.homeLabel ?? '', location: prefs.homeLocation };
+}
+
+export function saveHome(label: string, location: Coordinates) {
+  updatePreferences((prefs) => ({ ...prefs, homeLocation: location, homeLabel: label }));
+}
+
 // -------------------------------------------------------------------- Lernen
 
 const MAX_RECENT_PLACES = 40;

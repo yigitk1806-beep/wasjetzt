@@ -6,7 +6,7 @@ import { formatClock } from '@/lib/time';
 import { wegSumme } from '@/lib/wege';
 import { Clock } from '@/components/ui/icons';
 import { useLocale } from '@/components/LocaleProvider';
-import { dayLabel, distance, duration, planTitle, price, stationCount } from '@/lib/i18n/format';
+import { dayLabel, distance, duration, planPrice, planTitle, stationCount } from '@/lib/i18n/format';
 import type { Mobility, Plan } from '@/types/domain';
 
 const UNTERWEGS_EMOJI: Record<Mobility, string> = {
@@ -42,9 +42,9 @@ export function PlanHeader({ plan, onTimeClick }: Props) {
         ? t.plan.airline(distance(t, weg.meter))
         : `${t.common.approx} ${distance(t, weg.meter)}`;
 
-  const preis = plan.cost.perPerson
-    ? t.price.perPerson(price(t, plan.cost, plan.currency))
-    : price(t, plan.cost, plan.currency);
+  // Das Budget war für die Gruppe gemeint – also steht hier auch die Summe
+  // für die Gruppe, nicht der Betrag pro Kopf.
+  const preis = planPrice(t, plan.cost, plan.currency);
 
   const wetter =
     plan.weatherAtCreation && plan.weatherAtCreation.condition !== 'unknown'

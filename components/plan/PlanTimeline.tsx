@@ -83,6 +83,12 @@ export function PlanTimeline({
               <p className="mt-0.5 text-[0.8rem] text-ink-muted">
                 {kind(t, step.place.kind)} · {price(t, step.price, currency)}
               </p>
+              {/* Adresse aus OpenStreetMap – nur, wenn sie dort auch steht. */}
+              {step.place.location.address ? (
+                <p className="mt-0.5 truncate text-[0.76rem] text-ink-faint">
+                  📍 {step.place.location.address}
+                </p>
+              ) : null}
               {!step.openingHoursKnown ? (
                 <p className="mt-1 text-[0.76rem] text-sun-700">{t.plan.hoursUnknown}</p>
               ) : null}
@@ -139,7 +145,10 @@ function Weg({
   return (
     <div className="flex items-center gap-2 py-1.5 pl-[3.75rem] text-[0.76rem] text-ink-faint">
       {aufbruch ? (
-        <span className="font-semibold tabular-nums text-ink-muted">{t.plan.departAt(aufbruch)}</span>
+        <span className="font-semibold tabular-nums text-ink-muted">
+          <span aria-hidden>📍 </span>
+          {t.plan.departAt(aufbruch)}
+        </span>
       ) : null}
       {leg.durationMin > 0 ? (
         <>

@@ -7,7 +7,24 @@ export type OsmTags = Record<string, string>;
  * Gibt `null` zurück, wenn der Ort für WasJetzt nicht taugt – dann fliegt
  * er raus, statt in eine unpassende Kategorie gepresst zu werden.
  */
+/**
+ * Infrastruktur, die nie eine Freizeitidee ist – auch dann nicht, wenn
+ * zusätzlich ein brauchbares Tag daran hängt. In OSM trägt etwa ein
+ * Bahnhofsgebäude gern `tourism=attraction`, ein Parkplatz `leisure=park`
+ * als Tippfehler. Solche Treffer sollen gar nicht erst im Plan landen.
+ */
+function istInfrastruktur(tags: OsmTags): boolean {
+  if (tags.highway || tags.railway || tags.public_transport || tags.aeroway) return true;
+  if (tags.amenity === 'parking' || tags.amenity === 'bicycle_parking') return true;
+  if (tags.man_made === 'street_cabinet' || tags.barrier) return true;
+  // Reine Gebäude ohne eigene Nutzung.
+  if (tags.building && !tags.amenity && !tags.leisure && !tags.tourism && !tags.shop) return true;
+  return false;
+}
+
 export function classify(tags: OsmTags): ProfileKey | null {
+  if (istInfrastruktur(tags)) return null;
+
   const amenity = tags.amenity;
   const leisure = tags.leisure;
   const tourism = tags.tourism;
@@ -65,6 +82,10 @@ export function classify(tags: OsmTags): ProfileKey | null {
       case 'amusement_arcade':
       case 'adult_gaming_centre':
         return 'arcade';
+      case 'trampoline_park':
+        return 'trampoline';
+      case 'bowling_centre':
+        return 'bowling';
       case 'water_park':
         return 'waterpark';
       case 'swimming_pool':
@@ -109,7 +130,9 @@ export function classify(tags: OsmTags): ProfileKey | null {
 
   if (shop === 'mall' || shop === 'department_store') return 'mall';
   if (tags.natural === 'beach') return 'beach';
-  if (tags.sport === 'climbing') return 'climbing';
+  // Erlebnisorte, die in OSM nur über `sport` oder `leisure=track` hängen –
+  // Kartbahn, Lasertag, Kletterhalle, Paintball und Co.
+  if (tags.sport || tags.leisure === 'track') return erlebnisSport(tags.sport);
 
   return null;
 }
@@ -136,11 +159,27 @@ function restaurantKind(tags: OsmTags): ProfileKey {
  * fliegt raus, statt als Freizeitidee vorgeschlagen zu werden.
  */
 function sportKind(tags: OsmTags): ProfileKey | null {
-  const sport = (tags.sport ?? '').toLowerCase();
+  return erlebnisSport(tags.sport);
+}
+
+/**
+ * Sportarten, die man spontan zu zweit oder in der Gruppe machen kann –
+ * ohne Mitgliedschaft, ohne Verein, ohne Anmeldung für die Saison.
+ * Alles andere ist kein Freizeitvorschlag und fliegt raus.
+ */
+function erlebnisSport(wert: string | undefined): ProfileKey | null {
+  const sport = (wert ?? '').toLowerCase();
   if (/climbing|bouldering/.test(sport)) return 'climbing';
   if (/swimming/.test(sport)) return 'pool';
   if (/ice_skating|ice_hockey/.test(sport)) return 'icerink';
-  if (/bowling|10pin/.test(sport)) return 'bowling';
+  if (/bowling|10pin|9pin/.test(sport)) return 'bowling';
+  if (/karting|motorsport/.test(sport)) return 'karting';
+  if (/laser_?tag|lasergame/.test(sport)) return 'lasertag';
+  if (/paintball|airsoft/.test(sport)) return 'paintball';
+  if (/trampolin/.test(sport)) return 'trampoline';
+  if (/axe_?throwing|knife_throwing/.test(sport)) return 'axethrowing';
+  if (/billiards|snooker|darts/.test(sport)) return 'billiards';
+  if (/miniature_golf|minigolf/.test(sport)) return 'minigolf';
   return null;
 }
 
@@ -187,12 +226,17 @@ export function buildOverpassQuery(lat: number, lon: number, radiusMeters: numbe
       300,
     ],
     [
-      'nwr["leisure"~"^(park|garden|nature_reserve|bowling_alley|escape_game|miniature_golf|amusement_arcade|adult_gaming_centre|water_park|swimming_pool|ice_rink|dance|beach_resort|sports_centre)$"]["name"]',
+      'nwr["leisure"~"^(park|garden|nature_reserve|bowling_alley|bowling_centre|escape_game|miniature_golf|amusement_arcade|adult_gaming_centre|trampoline_park|water_park|swimming_pool|ice_rink|dance|beach_resort|sports_centre)$"]["name"]',
       150,
     ],
     ['nwr["tourism"~"^(museum|gallery|viewpoint|zoo|aquarium|theme_park|attraction)$"]["name"]', 150],
     ['nwr["shop"~"^(mall|department_store)$"]["name"]', 30],
-    ['nwr["sport"="climbing"]["name"]', 40],
+    // Erlebnisorte hängen in OSM oft nur am `sport`-Tag – eigener Block,
+    // damit Kartbahn und Lasertag nicht hinter 300 Restaurants verschwinden.
+    [
+      'nwr["sport"~"^(climbing|bouldering|karting|motorsport|laser_tag|lasergame|paintball|airsoft|trampoline|axe_throwing|billiards|snooker|darts|swimming|ice_skating|bowling|10pin|miniature_golf)$"]["name"]',
+      60,
+    ],
   ];
 
   const teile = bloecke.map(([filter, limit]) => `${filter};
