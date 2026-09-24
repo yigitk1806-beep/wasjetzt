@@ -518,6 +518,8 @@ export const de = {
     droppedSlot: () => 'Für einen weiteren Programmpunkt war gerade nichts Passendes offen.',
     noAction: () => 'Eine passende Action-Aktivität finde ich hier gerade nicht – lieber weniger Stationen als eine, die nicht passt.',
     noFood: () => 'Ein passendes Lokal finde ich hier gerade nicht.',
+    closedAt: (p: { place: string; time: string; name: string }) =>
+      `${p.place} schließt um ${p.time} Uhr. Soll ich für „${p.name}“ etwas anderes suchen?`,
     sequenceMissing: (p: { name: string }) =>
       `Für „${p.name}“ war zu dieser Zeit nichts Passendes offen. Umgestellt habe ich den Ablauf nicht.`,
     sequenceDetour: (p: { minutes: number }) =>

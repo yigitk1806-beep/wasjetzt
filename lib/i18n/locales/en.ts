@@ -492,6 +492,8 @@ export const en: Dictionary = {
     droppedSlot: () => 'Nothing suitable was open for one more activity.',
     noAction: () => 'I can’t find a fitting activity nearby right now – better fewer stops than one that doesn’t fit.',
     noFood: () => 'I can’t find a fitting place to eat nearby right now.',
+    closedAt: (p) =>
+      `${p.place} closes at ${p.time}. Shall I look for something else for “${p.name}”?`,
     sequenceMissing: (p) =>
       `Nothing suitable was open for “${p.name}” at that time. I did not reorder your plan.`,
     sequenceDetour: (p) =>

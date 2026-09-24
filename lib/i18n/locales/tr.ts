@@ -494,6 +494,8 @@ export const tr: Dictionary = {
     droppedSlot: () => 'Bir aktivite daha için uygun açık bir yer yoktu.',
     noAction: () => 'Şu an yakınlarda uygun bir aktivite bulamıyorum – uymayan bir durak yerine daha az durak daha iyi.',
     noFood: () => 'Şu an yakınlarda uygun bir yemek yeri bulamıyorum.',
+    closedAt: (p) =>
+      `${p.place} saat ${p.time} itibarıyla kapanıyor. „${p.name}“ için başka bir yer arayayım mı?`,
     sequenceMissing: (p) =>
       `„${p.name}“ için o saatte uygun açık bir yer yoktu. Sıralamayı değiştirmedim.`,
     sequenceDetour: (p) =>

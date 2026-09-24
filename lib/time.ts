@@ -148,6 +148,37 @@ export function openUntil(hours: OpeningHours, at: Date, offsetMin: number): num
 }
 
 /** 1080 → "18:00". Werte über Mitternacht werden zurückgerechnet. */
+/**
+ * Wann schließt der Ort an dem Tag, um den es geht?
+ *
+ * Gedacht für den Fall, dass ein Ort zur gewünschten Zeit gerade nicht mehr
+ * passt: Dann soll der Nutzer die echte Schließzeit erfahren statt nur
+ * „nichts offen“. Geantwortet wird ausschließlich aus den hinterlegten
+ * Öffnungszeiten – nie geraten.
+ *
+ * `null` heißt: darüber lässt sich nichts Verlässliches sagen. Das gilt auch,
+ * wenn der Ort an dem Tag erst später öffnet – „schließt um“ wäre dann
+ * irreführend.
+ */
+export function closingTimeFor(
+  hours: OpeningHours,
+  at: Date,
+  offsetMin: number,
+): number | null {
+  const min = minutesSinceMidnight(at, offsetMin);
+  const today = weekdayOf(at, offsetMin);
+  const intervalle = hours[today] ?? [];
+  if (intervalle.length === 0) return null;
+
+  // Liegt die geplante Zeit in einem Intervall, zählt dessen Ende.
+  for (const iv of intervalle) {
+    if (min >= iv.openMin && min < iv.closeMin) return iv.closeMin;
+  }
+  // Sonst das letzte Intervall, das vor der geplanten Zeit geendet hat.
+  const vorbei = intervalle.filter((iv) => iv.closeMin <= min).map((iv) => iv.closeMin);
+  return vorbei.length > 0 ? Math.max(...vorbei) : null;
+}
+
 export function clockFromMinutes(min: number): string {
   const m = ((Math.round(min) % 1440) + 1440) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;

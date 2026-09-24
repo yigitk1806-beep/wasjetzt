@@ -327,7 +327,7 @@ export function PlanView({ initialPlan }: Props) {
                       />
                     </>
                   ) : null}
-                  {note.key === 'sequenceMissing' ? (
+                  {note.key === 'sequenceMissing' || note.key === 'closedAt' ? (
                     <>
                       <Hinweisknopf
                         onClick={() => void neuPlanen({})}

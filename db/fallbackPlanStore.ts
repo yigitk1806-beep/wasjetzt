@@ -19,13 +19,26 @@ export class FallbackPlanStore implements PlanStore {
     private readonly mirror: PlanStore,
   ) {}
 
+  /**
+   * Warum der letzte Schreibversuch scheiterte – als kurze Einordnung, nie
+   * als Originalmeldung. Ohne das steht auf der Gesundheitsseite nur, DASS
+   * es nicht klappt; gesucht wird dann an der falschen Stelle.
+   */
+  private letzterFehler: string | null = null;
+
+  get fehlerart(): string | null {
+    return this.letzterFehler;
+  }
+
   async save(plan: Plan): Promise<Plan> {
     try {
       const saved = await this.primary.save(plan);
+      this.letzterFehler = null;
       // Spiegel aktuell halten, aber ohne den Erfolgsfall zu verzögern.
       void this.mirror.save(saved).catch(() => undefined);
       return saved;
     } catch (error) {
+      this.letzterFehler = einordnen(error);
       console.error('[planStore] Datenbank nicht erreichbar, halte Plan flüchtig', error);
       return this.mirror.save(plan);
     }
@@ -74,4 +87,19 @@ export class FallbackPlanStore implements PlanStore {
     const mirrored = await this.mirror.delete(id);
     return ok || mirrored;
   }
+}
+
+/**
+ * Ordnet einen Datenbankfehler einer Ursache zu.
+ *
+ * Bewusst nur ein Stichwort: Die Originalmeldung von Prisma enthält Host und
+ * Benutzer der Verbindung; die gehören nicht in eine öffentliche Antwort.
+ */
+function einordnen(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  if (/authentication|password/i.test(text)) return 'Anmeldedaten werden abgelehnt';
+  if (/Can't reach|ECONNREFUSED|ENOTFOUND/i.test(text)) return 'Server nicht erreichbar';
+  if (/Timed out|ETIMEDOUT/i.test(text)) return 'Zeitüberschreitung';
+  if (/does not exist|relation/i.test(text)) return 'Tabelle fehlt';
+  return error instanceof Error ? error.name : 'unbekannt';
 }

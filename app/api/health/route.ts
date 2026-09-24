@@ -116,6 +116,10 @@ export async function GET(request: Request) {
       ok: ausDatenbank,
       ...checks,
       datenbank: ausDatenbank ? 'verbunden' : 'Schreibversuch fiel auf Arbeitsspeicher zurück',
+      // Ohne die Ursache sucht man an der falschen Stelle.
+      ursache: ausDatenbank
+        ? undefined
+        : ((store as { fehlerart?: string | null }).fehlerart ?? 'unbekannt'),
       gueltigkeitTage: Number(tageGueltig.toFixed(1)),
       dauerMs: Date.now() - start,
     });

@@ -3,6 +3,8 @@ import { shortId } from '@/lib/id';
 import {
   dayPartOf,
   formatClock,
+  clockFromMinutes,
+  closingTimeFor,
   isOpenDuring,
   nextLocalTime,
   parseClock,
@@ -230,6 +232,20 @@ type BuildResult = {
   unerfuellt: NonNullable<Slot['need']>[];
   /** Positionen des gewünschten Ablaufs, die leer bleiben mussten. */
   offeneFolge: SequenceKind[];
+  /**
+   * Der beste Ort, der für einen leer gebliebenen Pflicht-Slot nur an der
+   * Öffnungszeit scheiterte – damit der Hinweis konkret werden kann.
+   */
+  geschlossen?: { kind: SequenceKind; place: string; closeMin: number };
+};
+
+/**
+ * Welchen Namen ein leer gebliebener Slot im Hinweis bekommt. Nur für die
+ * Fälle, in denen sich das ehrlich sagen lässt.
+ */
+const BEDARF_ALS_POSITION: Partial<Record<NonNullable<Slot['need']>, SequenceKind>> = {
+  food: 'food',
+  experience: 'action',
 };
 
 function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
@@ -244,6 +260,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
   let dropped = 0;
   const unerfuellt: NonNullable<Slot['need']>[] = [];
   const offeneFolge: SequenceKind[] = [];
+  let geschlossen: BuildResult['geschlossen'];
   const usedReasons: string[] = [];
 
   for (let i = 0; i < slots.length; i += 1) {
@@ -251,9 +268,11 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
     const isLast = i === slots.length - 1;
     const reserve = reserveMinutesFor(ctx, isLast, location);
 
+    const ablehnung: AblehnungBox = { beste: null };
     const picked = pickForSlot({
       ctx,
       slot,
+      ablehnung,
       profile,
       cursor,
       location,
@@ -271,6 +290,17 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
       // benannt – statt ihn durch irgendeine andere Station zu ersetzen.
       if (!slot.optional && slot.need) unerfuellt.push(slot.need);
       if (slot.sequenceKind) offeneFolge.push(slot.sequenceKind);
+
+      // Warum er leer blieb, wissen wir manchmal genau: Der beste Ort hatte
+      // schon zu. Das ist eine bessere Auskunft als "nichts gefunden".
+      const kind = slot.sequenceKind ?? BEDARF_ALS_POSITION[slot.need ?? 'main'];
+      if (!slot.optional && kind && ablehnung.beste && !geschlossen) {
+        geschlossen = {
+          kind,
+          place: ablehnung.beste.place.name,
+          closeMin: ablehnung.beste.closeMin,
+        };
+      }
       continue;
     }
 
@@ -283,7 +313,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
     spentMin += picked.step.price.perPerson?.min ?? 0;
   }
 
-  return { steps, droppedSlots: dropped, unerfuellt, offeneFolge };
+  return { steps, droppedSlots: dropped, unerfuellt, offeneFolge, geschlossen };
 }
 
 export function reserveMinutesFor(ctx: PlanContext, isLast: boolean, from: Coordinates): number {
@@ -311,9 +341,28 @@ type PickInput = {
   excludeIds?: Set<string>;
   /** Höchstabstand vom Startpunkt – der gerade betrachtete Suchring. */
   maxDistanceMeters?: number;
+  /** Sammelt den besten Kandidaten, der nur wegen der Öffnungszeit ausfiel. */
+  ablehnung?: AblehnungBox;
 };
 
 type Picked = { step: PlanStep; score: number };
+
+/**
+ * Ein Kandidat, der nur an der Öffnungszeit gescheitert ist – mitsamt der
+ * echten Schließzeit aus seinen hinterlegten Zeiten.
+ *
+ * Wird im selben Durchlauf festgehalten, in dem auch ausgewählt wird, und
+ * nach demselben Ranking bewertet: So ist es der Ort, der sonst gewonnen
+ * hätte, und keine nachträgliche Vermutung.
+ */
+export type Abgelehnt = { place: Place; closeMin: number; score: number };
+
+/**
+ * Gemeinsamer Behälter über alle Suchringe eines Slots hinweg. Muss ein
+ * Objekt sein: `pickFromPool` bekommt eine Kopie des Eingabeobjekts, aber
+ * denselben Behälter.
+ */
+type AblehnungBox = { beste: Abgelehnt | null };
 
 /**
  * Suchringe um den Startpunkt. WasJetzt sucht zuerst das, was wirklich in
@@ -467,7 +516,36 @@ function pickFromPool(
       weatherAtStart,
       reserveMinutes: heim ? heim.durationMin : input.reserveMinutes,
     });
-    if (!filter.ok) continue;
+    if (!filter.ok) {
+      // Hat der Ort zu der Zeit wirklich geschlossen? Dann merken, wann er
+      // schließt. Maßgeblich sind seine eigenen hinterlegten Zeiten – nicht
+      // der Grund, aus dem der Filter zuerst angeschlagen hat. Ein Ort, der
+      // offen hätte, taucht hier nicht auf; über den wäre „schließt um“
+      // schlicht gelogen.
+      const wirklichZu =
+        place.openingHours !== null &&
+        !isOpenDuring(place.openingHours, startAt, durationMin, ctx.tzOffsetMin);
+      if (wirklichZu && place.openingHours && input.ablehnung) {
+        const closeMin = closingTimeFor(place.openingHours, startAt, ctx.tzOffsetMin);
+        if (closeMin !== null) {
+          const bewertet = scorePlace({
+            place,
+            ctx,
+            slot,
+            distanceMeters,
+            weatherAtStart,
+            usedCategories: input.usedCategories,
+            previousCategory: input.previousCategory,
+            profile,
+          });
+          const bisher = input.ablehnung.beste;
+          if (!bisher || bewertet.total > bisher.score) {
+            input.ablehnung.beste = { place, closeMin, score: bewertet.total };
+          }
+        }
+      }
+      continue;
+    }
 
     const scored = scorePlace({
       place,
@@ -529,6 +607,7 @@ function buildNotes(
   dropped: number,
   unerfuellt: NonNullable<Slot['need']>[] = [],
   offeneFolge: SequenceKind[] = [],
+  geschlossen?: BuildResult['geschlossen'],
 ): PlanNote[] {
   const notes: PlanNote[] = [];
   // Maßgeblich ist das Wetter während des Plans, nicht das beim Erstellen.
@@ -570,8 +649,20 @@ function buildNotes(
 
   // Eine Position des gewünschten Ablaufs, die leer bleiben musste, wird
   // benannt. Die Reihenfolge heimlich umzustellen wäre ein Wortbruch.
+  // Kennen wir den Ort, der nur an der Uhrzeit scheiterte, wird der Hinweis
+  // konkret: "Café X schließt um 20:30 Uhr."
+  const konkret = geschlossen
+    ? note(ctx, 'availability', 'closedAt', {
+        kind: geschlossen.kind,
+        name: dict(ctx).sequence.kinds[geschlossen.kind],
+        place: geschlossen.place,
+        time: clockFromMinutes(geschlossen.closeMin),
+      })
+    : null;
+  if (konkret) notes.push(konkret);
+
   const folgeOffen = offeneFolge.length > 0;
-  if (folgeOffen) {
+  if (folgeOffen && !konkret) {
     const kind = offeneFolge[0];
     // `kind` für den Betrachter (der Link kann in jeder Sprache geöffnet
     // werden), `name` als Text in der Sprache der Anfrage.
@@ -592,7 +683,9 @@ function buildNotes(
 
   // Ein Wunsch, der sich nicht erfüllen ließ, wird benannt – nicht durch
   // eine beliebige andere Station kaschiert.
-  if (unerfuellt.includes('experience')) {
+  if (konkret) {
+    // Schon gesagt, und zwar genauer.
+  } else if (unerfuellt.includes('experience')) {
     notes.push(note(ctx, 'availability', 'noAction'));
   } else if (unerfuellt.includes('food')) {
     notes.push(note(ctx, 'availability', 'noFood'));
@@ -660,7 +753,7 @@ export function buildPlan(
   variant: PlanVariantKey = 'balanced',
 ): Plan | null {
   const profile = variantByKey(variant);
-  let { steps, droppedSlots, unerfuellt, offeneFolge } = buildSteps(ctx, profile);
+  let { steps, droppedSlots, unerfuellt, offeneFolge, geschlossen } = buildSteps(ctx, profile);
 
   // Früh am Morgen hat kaum etwas offen. Statt aufzugeben, wird der Beginn
   // stundenweise verschoben – solange noch Zeit im Budget bleibt.
@@ -669,7 +762,7 @@ export function buildPlan(
     verschobenUm += 1;
     const start = new Date(ctx.start.getTime() + verschobenUm * 60 * 60_000);
     if (start >= ctx.latestEnd) break;
-    ({ steps, droppedSlots, unerfuellt, offeneFolge } = buildSteps(
+    ({ steps, droppedSlots, unerfuellt, offeneFolge, geschlossen } = buildSteps(
       { ...ctx, start, dayPart: dayPartOf(start, ctx.tzOffsetMin) },
       profile,
     ));
@@ -677,7 +770,7 @@ export function buildPlan(
 
   if (steps.length === 0) return null;
   const plan = assemblePlan(
-    ctx, steps, profile.key, droppedSlots, undefined, unerfuellt, offeneFolge,
+    ctx, steps, profile.key, droppedSlots, undefined, unerfuellt, offeneFolge, geschlossen,
   );
   if (verschobenUm > 0) {
     plan.notes.unshift(
@@ -697,6 +790,7 @@ export function assemblePlan(
   >,
   unerfuellt: NonNullable<Slot['need']>[] = [],
   offeneFolge: SequenceKind[] = [],
+  geschlossen?: BuildResult['geschlossen'],
 ): Plan {
   const startISO = steps[0].startISO;
   const endISO = steps[steps.length - 1].endISO;
@@ -748,7 +842,7 @@ export function assemblePlan(
     // der Regen von jetzt.
     weatherAtCreation: weatherAt(ctx.weather, departISO) ?? ctx.weather.now ?? null,
     createdAtISO: existing?.createdAtISO ?? new Date().toISOString(),
-    notes: buildNotes(ctx, steps, droppedSlots, unerfuellt, offeneFolge),
+    notes: buildNotes(ctx, steps, droppedSlots, unerfuellt, offeneFolge, geschlossen),
     meetingPoint: existing?.meetingPoint,
     participants: existing?.participants ?? [],
     containsMockData: steps.some((s) => s.place.source === 'mock'),
@@ -911,7 +1005,7 @@ function echteWegeImAltenZeitplan(plan: Plan, legs: TravelLeg[], ctx: PlanContex
  * dem Routing kennt nur die fertigen Stationen und kann sie nicht noch
  * einmal herleiten – sie würden sonst stillschweigend verschwinden.
  */
-const BAU_HINWEISE = new Set(['sequenceMissing', 'noAction', 'noFood', 'droppedSlot']);
+const BAU_HINWEISE = new Set(['closedAt', 'sequenceMissing', 'noAction', 'noFood', 'droppedSlot']);
 
 function mergeNotes(alt: PlanNote[], neu: PlanNote[]): PlanNote[] {
   const kennung = (n: PlanNote) => n.key ?? n.text;
