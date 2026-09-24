@@ -9,6 +9,29 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
+ * Form der Verbindungszeichenfolge – ohne sie preiszugeben.
+ *
+ * Gibt nur Ja/Nein und die Länge zurück. Damit lässt sich von außen klären,
+ * ob beim Einfügen Anführungszeichen, ein Zeilenumbruch oder gleich ein
+ * ganzer psql-Befehl mitgekommen sind – die häufigsten Stolpersteine.
+ */
+function formDerVerbindung(): Record<string, unknown> {
+  const wert = process.env.DATABASE_URL ?? '';
+  return {
+    laenge: wert.length,
+    beginntMitProtokoll: /^postgres(ql)?:\/\//.test(wert),
+    beginntMit: wert.slice(0, 12),
+    beginntMitAnfuehrungszeichen: /^["']/.test(wert),
+    endetMitAnfuehrungszeichen: /["']$/.test(wert),
+    enthaeltLeerzeichen: /\s/.test(wert),
+    enthaeltZeilenumbruch: /[
+]/.test(wert),
+    poolerImHost: wert.includes('-pooler'),
+    sslmode: wert.includes('sslmode='),
+  };
+}
+
+/**
  * Betriebszustand der Anwendung.
  *
  * Existiert, weil ein stiller Rückfall auf den Arbeitsspeicher von außen nicht
@@ -120,6 +143,7 @@ export async function GET(request: Request) {
       ursache: ausDatenbank
         ? undefined
         : ((store as { fehlerart?: string | null }).fehlerart ?? 'unbekannt'),
+      form: ausDatenbank ? undefined : formDerVerbindung(),
       gueltigkeitTage: Number(tageGueltig.toFixed(1)),
       dauerMs: Date.now() - start,
     });
