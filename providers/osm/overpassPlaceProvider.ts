@@ -61,7 +61,7 @@ const SIGHTS_RADIUS_M = 2500;
 const SIGHTS_LIMIT = 500;
 
 /** Erhöhen, sobald sich ändert, welche Orte wie eingeordnet werden. */
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 
 /**
  * Zellgröße des Caches je Stufe. Die nahe Stufe braucht ein feines Raster
