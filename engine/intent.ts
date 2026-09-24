@@ -33,6 +33,13 @@ export type PlanIntent = {
   /** Ausdrücklich angetippte Kategorie; überstimmt alles andere. */
   wish?: Category;
   /**
+   * Essen war der Wunsch, nicht nur eine Station nebenbei.
+   *
+   * Wer die Kachel „Essen" antippt, will einen Abend ums Essen herum –
+   * ein Restaurant und dazu vielleicht eine Bar, keine Galerie.
+   */
+  foodFocus: boolean;
+  /**
    * Gewünschter Ablauf, falls der Nutzer einen genannt hat. Er ist eine
    * harte Anforderung – die Engine sucht die Orte, nicht die Reihenfolge.
    */
@@ -123,6 +130,7 @@ export function deriveIntent(request: PlanRequest, tzOffsetMin: number, start: D
     outdoor,
     nightcap,
     wish,
+    foodFocus: request.focusCategory === 'food',
     sequence: folge,
     groupSize: request.groupSize,
   };

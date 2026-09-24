@@ -1,4 +1,4 @@
-import type { Category, Mobility, Mood, Place, WeatherSlice } from '@/types/domain';
+import type { Category, Mobility, Mood, Place, PriceLevel, WeatherSlice } from '@/types/domain';
 import { BUDGET_MAX_LEVEL } from './budget';
 import type { PlanContext, ScoringWeights, Slot, VariantProfile } from './types';
 
@@ -125,11 +125,37 @@ function distanceScore(distanceMeters: number, ctx: PlanContext, sensitivity: nu
   return basis ** (0.75 + sensitivity * 0.75);
 }
 
+/**
+ * Was ein Preisniveau ungefähr pro Person kostet.
+ *
+ * Diese Zahlen werden **nie angezeigt**. Sie dienen allein dem Vergleich
+ * innerhalb des Rankings: Ohne sie wäre "50 € für zwei" nicht von "200 €
+ * für vier" zu unterscheiden, weil beide dieselbe Budgetstufe treffen.
+ * Angezeigt wird weiterhin nur € / €€ / €€€ mit dem Zusatz "geschätzt".
+ */
+const NIVEAU_EURO: Record<PriceLevel, number> = { 0: 0, 1: 12, 2: 28, 3: 60 };
+
 /** 0..1 – passt der Preis zum Budget. */
 function priceScore(place: Place, ctx: PlanContext): number {
-  const maxLevel = BUDGET_MAX_LEVEL[ctx.request.budget];
   const level = place.price.level;
 
+  // Echter Betrag vom Betrieb? Dann zählt der, nicht die Stufe.
+  const proKopf = place.price.perPerson
+    ? (place.price.perPerson.min + place.price.perPerson.max) / 2
+    : NIVEAU_EURO[level];
+
+  // Kennt die Anfrage ein Budget pro Kopf, wird daran gemessen. Das macht
+  // 30 € für eine Person und 25 € für zwei unterscheidbar – vorher fielen
+  // beide in dieselbe grobe Stufe und ergaben dasselbe Ergebnis.
+  if (ctx.budgetCap !== undefined && ctx.budgetCap > 0) {
+    const anteil = proKopf / ctx.budgetCap;
+    // Bis zur Hälfte des Budgets voll gut, danach fallend, über dem Budget
+    // deutlich abgewertet.
+    const passung = anteil <= 0.5 ? 1 : anteil <= 1 ? 1 - (anteil - 0.5) * 0.8 : Math.max(0, 0.6 - (anteil - 1) * 0.6);
+    return passung * (0.6 + ctx.preferences.priceSensitivity * 0.4);
+  }
+
+  const maxLevel = BUDGET_MAX_LEVEL[ctx.request.budget];
   if (level > maxLevel) {
     // Nicht hart ausschließen (das macht der Filter bei echtem Cap), aber deutlich abwerten.
     return Math.max(0, 0.35 - (level - maxLevel) * 0.2);
@@ -181,18 +207,29 @@ function roleScore(place: Place, slot: Slot): number {
  * funktionieren. Ein Eiscafé für acht Leute ist keine Zusage wert.
  */
 function groupScore(place: Place, groupSize: number): number {
-  if (groupSize <= 2) {
-    // Zu zweit: Intimität schlägt Gruppentauglichkeit, aber nur leicht.
-    return 0.55 + place.scores.romantic * 0.3 + place.scores.chill * 0.15;
+  const s = place.scores;
+
+  if (groupSize === 1) {
+    // Allein: Man braucht niemanden, mit dem man redet. Ein Kino, ein
+    // Museum, eine Stunde Arcade funktionieren bestens; ein Ort, der ganz
+    // vom Miteinander lebt (Karaoke, Bowlingbahn für acht), weniger.
+    const geselligkeitsLastig = s.social > 0.88 ? 0.2 : 0;
+    return Math.max(0, 0.45 + s.chill * 0.35 + s.novelty * 0.2 - geselligkeitsLastig);
   }
-  const gruppentauglich = place.scores.social;
+
+  if (groupSize === 2) {
+    // Zu zweit: Intimität schlägt Gruppentauglichkeit, aber nur leicht.
+    return 0.5 + s.romantic * 0.35 + s.chill * 0.15;
+  }
+
   if (groupSize >= 5) {
     // Ab fünf Leuten zählt Gruppentauglichkeit stark; sehr kleine Formate
-    // (Eisdiele, Aussichtspunkt) verlieren spürbar.
+    // (Eisdiele, Wellness) verlieren spürbar.
     const klein = KLEINE_FORMATE.has(place.category) ? 0.25 : 0;
-    return Math.max(0, gruppentauglich - klein);
+    return Math.max(0, s.social - klein);
   }
-  return 0.4 + gruppentauglich * 0.6;
+
+  return 0.4 + s.social * 0.6;
 }
 
 /** Arten, die in großer Gruppe selten funktionieren. */

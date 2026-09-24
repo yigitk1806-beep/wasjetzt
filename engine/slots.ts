@@ -51,6 +51,9 @@ function dedupe<T>(list: T[]): T[] {
 function hauptRollen(ctx: PlanContext): Category[] {
   const { intent } = ctx;
   if (intent.wish) return dedupe([intent.wish, ...verwandte(intent.wish)]);
+  // Wer „Essen" gewählt hat, bekommt einen Abend ums Essen herum: das
+  // Lokal hat einen eigenen Slot, hier kommt dazu, was dazu passt.
+  if (intent.foodFocus) return dedupe(['cafe', 'bar', 'culture', 'cinema']);
   if (intent.experience) return dedupe([...ERLEBNIS, ...(intent.outdoor ? DRAUSSEN_ROLLEN : [])]);
   if (intent.outdoor) return dedupe([...DRAUSSEN_ROLLEN, 'culture']);
   if (intent.romantic) return dedupe([...ROMANTISCH, ...TAGESZEIT[ctx.dayPart]]);
@@ -116,6 +119,7 @@ function zweiteRollen(ctx: PlanContext, haupt: Category[]): Category[] {
   if (intent.experience) offen.push(...ERLEBNIS);
   // Ohne bestimmten Wunsch: das, was zu dieser Tageszeit naheliegt.
   if (unspezifisch(ctx)) offen.push(...TAGESZEIT[ctx.dayPart]);
+  if (intent.foodFocus) offen.push('cafe', 'bar');
   const rest = dedupe(offen.filter((c) => c !== haupt[0]));
   return rest.length > 0 ? rest : [];
 }
