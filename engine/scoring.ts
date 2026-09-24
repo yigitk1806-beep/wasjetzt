@@ -148,11 +148,27 @@ function priceScore(place: Place, ctx: PlanContext): number {
   // 30 € für eine Person und 25 € für zwei unterscheidbar – vorher fielen
   // beide in dieselbe grobe Stufe und ergaben dasselbe Ergebnis.
   if (ctx.budgetCap !== undefined && ctx.budgetCap > 0) {
-    const anteil = proKopf / ctx.budgetCap;
-    // Bis zur Hälfte des Budgets voll gut, danach fallend, über dem Budget
-    // deutlich abgewertet.
-    const passung = anteil <= 0.5 ? 1 : anteil <= 1 ? 1 - (anteil - 0.5) * 0.8 : Math.max(0, 0.6 - (anteil - 1) * 0.6);
-    return passung * (0.6 + ctx.preferences.priceSensitivity * 0.4);
+    const empfindlich = 0.6 + ctx.preferences.priceSensitivity * 0.4;
+
+    // Kostenlos ist nie ein Nachteil. Ein Park verliert nicht dadurch an
+    // Wert, dass Geld übrig wäre.
+    if (proKopf === 0) return 0.95 * empfindlich;
+
+    // Das Budget gilt für den ganzen Abend, nicht für eine Station.
+    const stationen = Math.min(4, Math.max(1, Math.round(ctx.request.availableMinutes / 90)));
+    const anteil = proKopf / (ctx.budgetCap / stationen);
+
+    // Wer 500 € hat, will nicht zwingend zum Imbiss. Deutlich unter dem
+    // Rahmen ist deshalb nicht „besser“, sondern nur billiger; der beste
+    // Wert liegt dort, wo der Rahmen sinnvoll genutzt wird. Darüber fällt
+    // es ab – das Budget ist eine Grenze, keine Anregung.
+    const passung =
+      anteil <= 0.15 ? 0.72
+        : anteil <= 0.5 ? 0.72 + ((anteil - 0.15) / 0.35) * 0.28
+          : anteil <= 1 ? 1
+            : Math.max(0, 1 - (anteil - 1) * 0.7);
+
+    return passung * empfindlich;
   }
 
   const maxLevel = BUDGET_MAX_LEVEL[ctx.request.budget];
