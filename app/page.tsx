@@ -14,7 +14,7 @@ import { StartPointSheet } from '@/components/location/StartPointSheet';
 import { useLocale } from '@/components/LocaleProvider';
 import { useLocation } from '@/hooks/useLocation';
 import { useWeather } from '@/hooks/useWeather';
-import { loadRecentPlans, suggestRoutine, type RecentPlan } from '@/lib/clientStore';
+import { loadPreferences, loadRecentPlans, suggestRoutine, type RecentPlan } from '@/lib/clientStore';
 import { requestPlanStreamed, type PlanPhase, type PlanRequestInput } from '@/lib/planClient';
 import { errorText, recentTitle, recentSummary } from '@/lib/i18n/format';
 import type { Category } from '@/types/domain';
@@ -74,6 +74,8 @@ export default function HomePage() {
         originLabel: start.label,
         originFromDevice: start.fromDevice,
         startISO: new Date().toISOString(),
+        // Der zuletzt im Formular gewählte Umkreis gilt auch hier.
+        searchRadiusMeters: loadPreferences().defaultRadiusMeters,
         ...extra,
       }, setPhase);
 

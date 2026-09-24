@@ -486,6 +486,7 @@ function toPlace(element: OverpassElement): Place | null {
     source: 'openstreetmap',
     // Für die Tourplanung: Orte ohne Wikipedia-Artikel werden zu Geheimtipps.
     notable: isNotable(tags),
+    sightseeing: profile.sightseeing,
     minAge: minAgeOf(tags, profile.minAge),
     bookable: profile.bookable,
   };

@@ -116,6 +116,8 @@ export const it: Dictionary = {
     mood: 'Umore',
     more: 'Altre impostazioni',
     mobility: 'Come vi spostate?',
+    radius: 'Raggio di ricerca',
+    radiusValue: (d) => `Cerco entro ${d}`,
     single: 'Una cosa sola',
     submit: 'Crea piano',
     submitting: 'Creazione del piano',
@@ -232,6 +234,7 @@ export const it: Dictionary = {
     startDevice: 'la tua posizione attuale',
     changeStart: 'Modifica',
     replanning: 'Sto rifacendo il piano',
+    radius: (d) => `raggio ${d}`,
     widen: 'Cercare più lontano',
     changeTime: 'Cambia orario',
     stops: (n) => `${n} ${n === 1 ? 'tappa' : 'tappe'}`,
@@ -493,6 +496,8 @@ export const it: Dictionary = {
         : `${p.count} tappe non hanno orari indicati – controlla prima di andare.`,
     droppedSlot: () => 'Non c’era niente di adatto aperto per un’altra attività.',
     noAction: () => 'Al momento non trovo un’attività adatta qui vicino – meglio meno tappe che una che non c’entra.',
+    outsideRadius: (p) =>
+      `Non trovo niente di adatto entro ${p.radius}.`,
     noFood: () => 'Al momento non trovo un locale adatto qui vicino.',
     closedAt: (p) =>
       `${p.place} chiude alle ${p.time}. Cerco qualcos’altro per «${p.name}»?`,
@@ -562,6 +567,7 @@ export const it: Dictionary = {
     culture: 'cultura',
     indoor: 'meglio al chiuso',
     near: 'vicinissimo',
+    radius: (d) => `entro ${d}`,
     walk: 'a piedi',
     bike: 'in bici',
     car: 'in auto',

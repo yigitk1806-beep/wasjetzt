@@ -154,6 +154,8 @@ export type ParsedIntent = {
   preferNovelty?: boolean;
   avoidOutdoor?: boolean;
   maxDistanceMeters?: number;
+  /** "im Umkreis von 2 km" – harte Obergrenze ab Startpunkt. */
+  searchRadiusMeters?: number;
   /** Was der Parser tatsächlich verstanden hat – für die UI. */
   understood: string[];
   /** Dasselbe als Schlüssel – die Oberfläche zeigt es in der Sprache des Nutzers. */

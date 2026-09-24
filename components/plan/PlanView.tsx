@@ -304,7 +304,7 @@ export function PlanView({ initialPlan }: Props) {
                   {noteText(t, note)}
                   {/* Statt irgendetwas einzubauen: fragen, ob weiter gesucht
                       werden soll. Die Entscheidung bleibt beim Nutzer. */}
-                  {note.key === 'noAction' && !plan.request.radiusBoost ? (
+                  {(note.key === 'noAction' || note.key === 'outsideRadius') && !plan.request.radiusBoost ? (
                     <Hinweisknopf
                       onClick={() => void widerSuchen()}
                       disabled={replanning}

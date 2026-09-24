@@ -2,7 +2,7 @@
 
 import { motion } from 'motion/react';
 import { useLocale } from '@/components/LocaleProvider';
-import { DEVICE_LOCATION_LABEL } from '@/lib/i18n/format';
+import { DEVICE_LOCATION_LABEL, distance } from '@/lib/i18n/format';
 import type { Dictionary } from '@/lib/i18n';
 import type { PlanRequest } from '@/types/domain';
 
@@ -34,6 +34,10 @@ export function StartPointBar({ request, onChange, busy = false }: Props) {
       </span>
       <p className="min-w-0 flex-1 text-[0.86rem] leading-snug text-ink-soft">
         {t.plan.startTitle(startLabel(t, request))}
+        {/* Nur, wenn der Nutzer den Umkreis selbst gewählt hat. */}
+        {request.searchRadiusMeters ? (
+          <span className="text-ink-muted"> · {t.plan.radius(distance(t, request.searchRadiusMeters))}</span>
+        ) : null}
       </p>
       <button
         type="button"

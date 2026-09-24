@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { PeopleField } from '@/components/ui/PeopleField';
 import { SequenceEditor } from '@/components/ui/SequenceEditor';
+import { RadiusField, RADIUS_STANDARD } from '@/components/ui/RadiusField';
 import { PlanningOverlay } from '@/components/PlanningOverlay';
 import { ArrowRight } from '@/components/ui/icons';
 import {
@@ -23,7 +24,7 @@ import { duration, errorText, locationLabel } from '@/lib/i18n/format';
 import type { UnderstoodToken } from '@/providers/types';
 import { useLocale } from '@/components/LocaleProvider';
 import { useLocation } from '@/hooks/useLocation';
-import { loadPreferences } from '@/lib/clientStore';
+import { loadPreferences, updatePreferences } from '@/lib/clientStore';
 import { requestPlanStreamed, type PlanPhase } from '@/lib/planClient';
 import type { BudgetPreset, Mobility, Mood, Party, SequenceKind } from '@/types/domain';
 
@@ -87,6 +88,8 @@ export default function BuildPlanPage() {
   const [wantsFood, setWantsFood] = useState<boolean | undefined>(undefined);
   // Gewünschter Ablauf; leer = die Engine entscheidet die Reihenfolge.
   const [sequence, setSequence] = useState<SequenceKind[]>([]);
+  // Umkreis ab Startpunkt. Harte Obergrenze – die Engine geht nie darüber.
+  const [radius, setRadius] = useState(RADIUS_STANDARD);
   const [moods, setMoods] = useState<Mood[]>([]);
   const [mobility, setMobility] = useState<Mobility>('transit');
   // Beide Uhrzeiten als Ortszeit ("14:30"); null = jetzt bzw. keine Endzeit.
@@ -106,6 +109,7 @@ export default function BuildPlanPage() {
     const prefs = loadPreferences();
     setParty(prefs.defaultParty);
     setMobility(prefs.defaultMobility);
+    if (prefs.defaultRadiusMeters) setRadius(prefs.defaultRadiusMeters);
   }, []);
 
   // Freitext live auswerten, damit der Nutzer sieht, was ankommt.
@@ -145,6 +149,7 @@ export default function BuildPlanPage() {
       setBudgetFree(intent.budgetTotal === 0);
     }
     if (typeof intent.wantsFood === 'boolean') setWantsFood(intent.wantsFood);
+    if (typeof intent.searchRadiusMeters === 'number') setRadius(intent.searchRadiusMeters);
     if (intent.singleActivity === true) setSingleActivity(true);
     if (Array.isArray(intent.sequence) && intent.sequence.length > 0) {
       setSequence(intent.sequence as SequenceKind[]);
@@ -192,6 +197,8 @@ export default function BuildPlanPage() {
     setBusy(true);
     setPhase(null);
     setError(null);
+    // Merken, damit "Jetzt los" auf der Startseite denselben Umkreis nimmt.
+    updatePreferences((p) => ({ ...p, defaultRadiusMeters: radius }));
 
     const response = await requestPlanStreamed({
       lat: start.location.lat,
@@ -206,6 +213,7 @@ export default function BuildPlanPage() {
       budgetTotal: budgetFree ? 0 : budgetTotal,
       wantsFood,
       sequence: sequence.length > 0 ? sequence : undefined,
+      searchRadiusMeters: radius,
       moods,
       mobility,
       // Uhrzeiten gehen als Ortszeit zum Server; der rechnet mit der
@@ -333,6 +341,10 @@ export default function BuildPlanPage() {
               </Chip>
             ))}
           </div>
+        </Section>
+
+        <Section title={t.build.radius}>
+          <RadiusField value={radius} onChange={setRadius} />
         </Section>
 
         <Section title={t.build.people}>

@@ -140,6 +140,13 @@ export function normalizePlanRequest(raw: unknown): PlanRequest {
       budgetTotal !== undefined && budgetTotal >= 0 ? Math.min(10_000, budgetTotal) : undefined,
     wantsFood:
       typeof input.wantsFood === 'boolean' ? input.wantsFood : undefined,
+    searchRadiusMeters: (() => {
+      const r = num(input.searchRadiusMeters);
+      if (r === undefined) return undefined;
+      // Unter 300 m findet auch in der Innenstadt kaum etwas, über 50 km
+      // ist es kein Freizeitplan mehr.
+      return Math.round(Math.max(300, Math.min(50_000, r)));
+    })(),
     radiusBoost: (() => {
       const b = num(input.radiusBoost);
       return b !== undefined && b > 1 ? Math.min(3, b) : undefined;

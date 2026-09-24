@@ -116,6 +116,8 @@ export const en: Dictionary = {
     mood: 'Mood',
     more: 'More settings',
     mobility: 'Getting around',
+    radius: 'Search radius',
+    radiusValue: (d) => `Searching within ${d}`,
     single: 'Just one thing',
     submit: 'Build plan',
     submitting: 'Building your plan',
@@ -232,6 +234,7 @@ export const en: Dictionary = {
     startDevice: 'your current location',
     changeStart: 'Change',
     replanning: 'Rebuilding the plan',
+    radius: (d) => `within ${d}`,
     widen: 'Search further away',
     changeTime: 'Change time',
     stops: (n) => `${n} ${n === 1 ? 'stop' : 'stops'}`,
@@ -491,6 +494,8 @@ export const en: Dictionary = {
         : `${p.count} stops have no opening hours listed – check before you go.`,
     droppedSlot: () => 'Nothing suitable was open for one more activity.',
     noAction: () => 'I can’t find a fitting activity nearby right now – better fewer stops than one that doesn’t fit.',
+    outsideRadius: (p) =>
+      `I can’t find anything suitable within ${p.radius}.`,
     noFood: () => 'I can’t find a fitting place to eat nearby right now.',
     closedAt: (p) =>
       `${p.place} closes at ${p.time}. Shall I look for something else for “${p.name}”?`,
@@ -559,6 +564,7 @@ export const en: Dictionary = {
     culture: 'culture',
     indoor: 'rather indoors',
     near: 'very close by',
+    radius: (d) => `within ${d}`,
     walk: 'on foot',
     bike: 'by bike',
     car: 'by car',

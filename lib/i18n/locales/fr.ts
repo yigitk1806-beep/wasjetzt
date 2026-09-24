@@ -116,6 +116,8 @@ export const fr: Dictionary = {
     mood: 'Envie',
     more: 'Plus de réglages',
     mobility: 'Comment vous déplacez-vous ?',
+    radius: 'Rayon de recherche',
+    radiusValue: (d) => `Recherche dans un rayon de ${d}`,
     single: 'Une seule chose',
     submit: 'Créer le plan',
     submitting: 'Création du plan',
@@ -232,6 +234,7 @@ export const fr: Dictionary = {
     startDevice: 'votre position actuelle',
     changeStart: 'Modifier',
     replanning: 'Nouveau plan en cours',
+    radius: (d) => `rayon ${d}`,
     widen: 'Chercher plus loin',
     changeTime: 'Modifier l’heure',
     stops: (n) => `${n} ${n === 1 ? 'étape' : 'étapes'}`,
@@ -491,6 +494,8 @@ export const fr: Dictionary = {
         : `${p.count} étapes n’ont pas d’horaires indiqués – vérifiez avant d’y aller.`,
     droppedSlot: () => 'Rien d’adapté n’était ouvert pour une activité de plus.',
     noAction: () => 'Je ne trouve pas d’activité qui convienne dans le coin – mieux vaut moins d’étapes qu’une qui ne va pas.',
+    outsideRadius: (p) =>
+      `Je ne trouve rien qui convienne dans un rayon de ${p.radius}.`,
     noFood: () => 'Je ne trouve pas de restaurant qui convienne dans le coin.',
     closedAt: (p) =>
       `${p.place} ferme à ${p.time}. Je cherche autre chose pour « ${p.name} » ?`,
@@ -560,6 +565,7 @@ export const fr: Dictionary = {
     culture: 'culture',
     indoor: 'plutôt à l’intérieur',
     near: 'tout près',
+    radius: (d) => `rayon ${d}`,
     walk: 'à pied',
     bike: 'à vélo',
     car: 'en voiture',

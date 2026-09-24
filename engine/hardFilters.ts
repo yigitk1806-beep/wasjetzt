@@ -1,3 +1,4 @@
+import { haversineMeters } from '@/lib/geo';
 import { isOpenDuring, localHour } from '@/lib/time';
 import type { Place, WeatherSlice } from '@/types/domain';
 import { BUDGET_MAX_LEVEL } from './budget';
@@ -69,6 +70,14 @@ export function passesHardFilters(input: FilterInput): FilterResult {
   // 2. In Reichweite?
   if (distanceMeters > ctx.radiusMeters) {
     return { ok: false, reason: 'too-far' };
+  }
+
+  // 2b. Und innerhalb des gewählten Umkreises um den Startpunkt. Der Schritt
+  //     oben misst ab der vorherigen Station – ohne diese zweite Prüfung
+  //     könnte ein Plan Schritt für Schritt aus dem Umkreis herauswandern.
+  //     Gemessen wird Luftlinie; der tatsächliche Weg darf länger sein.
+  if (haversineMeters(ctx.request.origin, place.location) > ctx.radiusMeters) {
+    return { ok: false, reason: 'outside-radius' };
   }
 
   // 3. Passt das ins Zeitfenster?

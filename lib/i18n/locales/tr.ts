@@ -116,6 +116,8 @@ export const tr: Dictionary = {
     mood: 'Ruh hali',
     more: 'Daha fazla ayar',
     mobility: 'Nasıl gidiyorsunuz?',
+    radius: 'Arama yarıçapı',
+    radiusValue: (d) => `${d} çevresinde aranıyor`,
     single: 'Sadece tek bir şey',
     submit: 'Plan oluştur',
     submitting: 'Plan oluşturuluyor',
@@ -232,6 +234,7 @@ export const tr: Dictionary = {
     startDevice: 'mevcut konumun',
     changeStart: 'Değiştir',
     replanning: 'Plan yeniden kuruluyor',
+    radius: (d) => `${d} çevresi`,
     widen: 'Daha uzakta ara',
     changeTime: 'Saati değiştir',
     stops: (n) => `${n} durak`,
@@ -493,6 +496,8 @@ export const tr: Dictionary = {
         : `${p.count} durağın açılış saatleri yok – gitmeden önce kontrol et.`,
     droppedSlot: () => 'Bir aktivite daha için uygun açık bir yer yoktu.',
     noAction: () => 'Şu an yakınlarda uygun bir aktivite bulamıyorum – uymayan bir durak yerine daha az durak daha iyi.',
+    outsideRadius: (p) =>
+      `${p.radius} çevresinde uygun bir şey bulamıyorum.`,
     noFood: () => 'Şu an yakınlarda uygun bir yemek yeri bulamıyorum.',
     closedAt: (p) =>
       `${p.place} saat ${p.time} itibarıyla kapanıyor. „${p.name}“ için başka bir yer arayayım mı?`,
@@ -553,6 +558,7 @@ export const tr: Dictionary = {
     culture: 'kültür',
     indoor: 'kapalı alan olsun',
     near: 'çok yakında',
+    radius: (d) => `${d} çevresi`,
     walk: 'yürüyerek',
     bike: 'bisikletle',
     car: 'arabayla',

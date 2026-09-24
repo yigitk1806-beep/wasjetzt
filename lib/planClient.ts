@@ -24,6 +24,8 @@ export type PlanRequestInput = {
   wantsFood?: boolean;
   /** Größerer Suchradius, nachdem der Nutzer zugestimmt hat. */
   radiusBoost?: number;
+  /** Gewählter Umkreis in Metern – harte Obergrenze ab Startpunkt. */
+  searchRadiusMeters?: number;
   moods?: Mood[];
   mobility?: Mobility;
   mustBeHomeByISO?: string;
@@ -171,6 +173,7 @@ export async function replanFrom(
       budgetTotal: r.budgetTotal,
       wantsFood: r.wantsFood,
       radiusBoost: r.radiusBoost,
+      searchRadiusMeters: r.searchRadiusMeters,
       moods: r.moods,
       mobility: r.mobility,
       startLocal: r.startLocal,

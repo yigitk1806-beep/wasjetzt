@@ -131,6 +131,8 @@ export const de = {
     mood: 'Stimmung',
     more: 'Mehr Einstellungen',
     mobility: 'Wie unterwegs?',
+    radius: 'Suchradius',
+    radiusValue: (d: string) => `Suche im Umkreis von ${d}`,
     single: 'Nur eine Sache',
     submit: 'Plan erstellen',
     submitting: 'Plan wird erstellt',
@@ -250,6 +252,7 @@ export const de = {
     startDevice: 'deinem aktuellen Standort',
     changeStart: 'Ändern',
     replanning: 'Plan wird neu gebaut',
+    radius: (d: string) => `Umkreis ${d}`,
     widen: 'Weiter weg suchen',
     changeTime: 'Zeit ändern',
     stops: (n: number) => `${n} ${n === 1 ? 'Station' : 'Stationen'}`,
@@ -517,6 +520,8 @@ export const de = {
         : `Für ${p.count} Punkte sind keine Öffnungszeiten hinterlegt – vorher kurz prüfen.`,
     droppedSlot: () => 'Für einen weiteren Programmpunkt war gerade nichts Passendes offen.',
     noAction: () => 'Eine passende Action-Aktivität finde ich hier gerade nicht – lieber weniger Stationen als eine, die nicht passt.',
+    outsideRadius: (p: { radius: string }) =>
+      `Im Umkreis von ${p.radius} finde ich nichts Passendes.`,
     noFood: () => 'Ein passendes Lokal finde ich hier gerade nicht.',
     closedAt: (p: { place: string; time: string; name: string }) =>
       `${p.place} schließt um ${p.time} Uhr. Soll ich für „${p.name}“ etwas anderes suchen?`,
@@ -588,6 +593,7 @@ export const de = {
     culture: 'Kultur',
     indoor: 'lieber drinnen',
     near: 'ganz in der Nähe',
+    radius: (d: string) => `Umkreis ${d}`,
     walk: 'zu Fuß',
     bike: 'mit dem Rad',
     car: 'mit dem Auto',

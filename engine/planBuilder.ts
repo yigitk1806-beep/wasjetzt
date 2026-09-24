@@ -75,12 +75,14 @@ export async function createPlanContext(
   // Wetterdienst. Reicht für die Suche; festgelegt wird weiter unten.
   const vorlaeufig = resolveTimes(request, request.tzOffsetMin ?? processOffsetMin(now), now);
   const isTour = request.mode === 'tour';
-  const radiusMeters =
-    overrides?.radiusMeters ??
-    // Hat der Nutzer zugestimmt, weiter weg zu suchen, gilt der größere Radius.
-    (isTour
+  // Der gewählte Umkreis schlägt die Voreinstellung nach Fortbewegung. Der
+  // Faktor greift nur, wenn der Nutzer ausdrücklich "weiter weg suchen"
+  // gewählt hat – von selbst überschreitet die Engine die Grenze nie.
+  const basisRadius = request.searchRadiusMeters
+    ?? (isTour
       ? tourRadiusMeters(request.availableMinutes)
-      : searchRadiusMeters(request.mobility, request.availableMinutes) * (request.radiusBoost ?? 1));
+      : searchRadiusMeters(request.mobility, request.availableMinutes));
+  const radiusMeters = overrides?.radiusMeters ?? basisRadius * (request.radiusBoost ?? 1);
   // Die Vorhersage muss bis zum Ende des Plans reichen – auch wenn er erst
   // morgen Nachmittag stattfindet.
   const stunden = Math.min(
@@ -473,6 +475,19 @@ function abwechslungOk(category: Category, input: PickInput, aufgeweicht: boolea
   return true;
 }
 
+/**
+ * Hat der Nutzer Sehenswürdigkeiten überhaupt gewollt?
+ *
+ * Nur drei Wege führen dahin: die Besichtigungstour, eine ausdrückliche
+ * Position „Kultur“ im gewünschten Ablauf, oder die angetippte Kachel.
+ * Alles andere bekommt Orte, an denen man etwas tut.
+ */
+function sehenswuerdigkeitenGewollt(ctx: PlanContext, slot: Slot): boolean {
+  if (ctx.request.mode === 'tour') return true;
+  if (slot.sequenceKind === 'culture') return true;
+  return ctx.request.focusCategory === 'culture';
+}
+
 function pickFromPool(
   input: PickInput,
   roles: Category[],
@@ -485,6 +500,10 @@ function pickFromPool(
     if (input.usedPlaceIds.has(place.id)) continue;
     if (input.excludeIds?.has(place.id)) continue;
     if (!roles.includes(place.category)) continue;
+    // Ein Denkmal ist kein Programmpunkt. Reine Sehenswürdigkeiten kommen
+    // nur in den Plan, wenn jemand ausdrücklich danach gefragt hat – sonst
+    // füllten sie jede Lücke, weil sie gratis und immer „offen“ sind.
+    if (place.sightseeing && !sehenswuerdigkeitenGewollt(ctx, slot)) continue;
     if (!abwechslungOk(place.category, input, aufgeweicht)) continue;
 
     // Der Ring gilt ab dem Startpunkt: Ein Plan soll in der Gegend bleiben,
@@ -683,8 +702,15 @@ function buildNotes(
 
   // Ein Wunsch, der sich nicht erfüllen ließ, wird benannt – nicht durch
   // eine beliebige andere Station kaschiert.
+  // Hat der Nutzer den Umkreis selbst gewählt und blieb etwas leer, ist das
+  // die wahrscheinlichste Ursache – und die einzige, die er ändern kann.
+  const umkreis = ctx.request.searchRadiusMeters;
   if (konkret) {
     // Schon gesagt, und zwar genauer.
+  } else if (umkreis && (unerfuellt.length > 0 || folgeOffen)) {
+    notes.push(
+      note(ctx, 'availability', 'outsideRadius', { radius: distanz(ctx, umkreis) }),
+    );
   } else if (unerfuellt.includes('experience')) {
     notes.push(note(ctx, 'availability', 'noAction'));
   } else if (unerfuellt.includes('food')) {
@@ -695,6 +721,13 @@ function buildNotes(
   }
 
   return notes;
+}
+
+/** Entfernung in der Sprache der Anfrage – "2 km" statt "2000". */
+function distanz(ctx: PlanContext, meter: number): string {
+  return meter >= 1000
+    ? `${String(Math.round(meter / 100) / 10).replace('.', dict(ctx).units.decimal === 'de-DE' ? ',' : '.')} km`
+    : `${meter} m`;
 }
 
 /** Ab so vielen Minuten Mehrweg lohnt der Hinweis. */

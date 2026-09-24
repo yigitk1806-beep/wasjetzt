@@ -38,6 +38,14 @@ export type ActivityProfile = {
   };
   minAge?: number;
   bookable?: boolean;
+  /**
+   * Reine Sehenswürdigkeit: ein Denkmal, ein Kunstwerk, ein bekanntes
+   * Gebäude. Man steht davor und schaut – man *tut* dort nichts.
+   *
+   * Solche Orte gehören in eine Besichtigungstour, aber nicht als
+   * Lückenfüller in einen Abend, bei dem jemand etwas erleben wollte.
+   */
+  sightseeing?: boolean;
 };
 
 export type ProfileKey = keyof typeof ACTIVITY_PROFILES;
@@ -278,6 +286,7 @@ export const ACTIVITY_PROFILES = {
     category: 'culture', kind: 'Sehenswürdigkeit', emoji: '📸', priceLevel: 0,
     typicalDurationMin: 50, indoorOutdoor: 'mixed', ...MIXED, bestSeasons: [],
     scores: { romantic: 0.7, action: 0.2, family: 0.7, chill: 0.7, novelty: 0.75, social: 0.6 },
+    sightseeing: true,
   },
 
   // ----------------------------------------------------------------- Natur

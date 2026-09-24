@@ -171,6 +171,11 @@ export type Place = {
   /** Mit Wikipedia/Wikidata verknüpft – echtes Bekanntheitssignal aus OSM. */
   notable?: boolean;
   /**
+   * Reine Sehenswürdigkeit – anschauen statt erleben. Kommt nur in einen
+   * Abendplan, wenn jemand ausdrücklich danach gefragt hat.
+   */
+  sightseeing?: boolean;
+  /**
    * Verknüpfter Wikipedia-Artikel aus OSM, z. B. "de:Brandenburger Tor".
    * Quelle für Vorschaubild und Kurzbeschreibung in der Tour-Ansicht.
    */
@@ -396,6 +401,14 @@ export type PlanRequest = {
    * hat dem ausdrücklich zugestimmt. 1 = normal, 2 = doppelt.
    */
   radiusBoost?: number;
+  /**
+   * Vom Nutzer gewählter Umkreis in Metern, Luftlinie ab Startpunkt.
+   *
+   * Ist er gesetzt, ist er eine Obergrenze: Die Engine sucht nicht von
+   * selbst weiter. Wer 2 km wählt, bekommt nichts aus 5 km – lieber eine
+   * ehrliche Meldung und den Knopf, den Umkreis zu vergrößern.
+   */
+  searchRadiusMeters?: number;
   moods: Mood[];
   mobility: Mobility;
   /** ISO – "wir müssen um X zuhause sein". */
@@ -458,6 +471,8 @@ export type UserPreferences = {
   priceSensitivity: number;
   defaultMobility: Mobility;
   defaultParty: Party;
+  /** Zuletzt gewählter Suchumkreis in Metern. */
+  defaultRadiusMeters?: number;
   /** Zuletzt besuchte/geplante Orte – für "etwas Neues". */
   recentPlaceIds: string[];
   recentCategories: Category[];

@@ -13,6 +13,13 @@ const ERLEBNIS: Category[] = ['activity', 'gaming', 'sport'];
 /** Ruhiges Programm: etwas ansehen, etwas trinken, spazieren. */
 const RUHIG: Category[] = ['culture', 'cafe', 'nature', 'wellness'];
 
+/**
+ * Alleine unterwegs. Was zu zweit oder in der Gruppe trägt, trägt allein
+ * nicht unbedingt – und umgekehrt: Ein Museum, ein Kino oder eine Stunde im
+ * Arcade funktionieren allein hervorragend.
+ */
+const ALLEIN: Category[] = ['culture', 'cinema', 'gaming', 'cafe', 'sport', 'wellness', 'shopping'];
+
 /** Romantisch, ohne Action-Wunsch. */
 const ROMANTISCH: Category[] = ['culture', 'cinema', 'wellness', 'activity', 'nature'];
 
@@ -48,6 +55,7 @@ function hauptRollen(ctx: PlanContext): Category[] {
   if (intent.outdoor) return dedupe([...DRAUSSEN_ROLLEN, 'culture']);
   if (intent.romantic) return dedupe([...ROMANTISCH, ...TAGESZEIT[ctx.dayPart]]);
   if (intent.calm) return dedupe([...RUHIG, ...TAGESZEIT[ctx.dayPart]]);
+  if (ctx.request.party === 'solo') return dedupe([...ALLEIN, ...TAGESZEIT[ctx.dayPart]]);
   return TAGESZEIT[ctx.dayPart];
 }
 

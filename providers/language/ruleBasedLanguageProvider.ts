@@ -323,6 +323,20 @@ const RULES: Rule[] = [
     label: { key: 'indoor' },
   },
   {
+    // "im Umkreis von 1 km", "maximal 5 km", "nicht weiter als 10 km"
+    test: /\b(?:umkreis von|radius von|maximal|max\.?|hoechstens|höchstens|nicht weiter als|within|no more than)\s*(\d{1,3})\s*(km|kilometer|m|meter)\b/i,
+    apply: (i, m) => {
+      const zahl = Number(m[1]);
+      if (!Number.isFinite(zahl) || zahl <= 0) return;
+      const meter = /^k/i.test(m[2]) ? zahl * 1000 : zahl;
+      i.searchRadiusMeters = Math.max(300, Math.min(50_000, Math.round(meter)));
+    },
+    label: (m) => ({
+      key: 'radius',
+      args: [/^k/i.test(m[2]) ? `${m[1]} km` : `${m[1]} m`],
+    }),
+  },
+  {
     test: /\b(nicht weit|in der nähe|in der naehe|um die ecke|nah|close by|nearby|keine lust zu fahren)\b/i,
     apply: (i) => {
       i.maxDistanceMeters = 2500;
