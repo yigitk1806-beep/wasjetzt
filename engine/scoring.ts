@@ -3,7 +3,7 @@ import { BUDGET_MAX_LEVEL } from './budget';
 import type { PlanContext, ScoringWeights, Slot, VariantProfile } from './types';
 
 /** Arten, an denen man nichts *tut* – als "Action" ungeeignet. */
-const PASSIV = new Set<Category>(['nature', 'shopping', 'cafe', 'wellness']);
+const PASSIV = new Set<Category>(['nature', 'shopping', 'cafe', 'wellness', 'culture']);
 import { seasonCategoryBoost, seasonFit, weatherFit, weatherModeOf } from './weatherRules';
 
 /**
@@ -344,7 +344,10 @@ export function scorePlace(input: ScoreInput): ScoreResult {
   // Orte, an denen man nichts tut, sind dafür kein Ersatz.
   if (slot.need === 'experience') {
     total += place.scores.action * 1.4;
-    if (PASSIV.has(place.category)) total -= 1.5;
+    // Der Abzug übersteigt bewusst die gesamte Spanne der Nähe (Gewicht
+    // 1,8): Eine Galerie darf einen Action-Ort nicht schlagen, nur weil sie
+    // zwei Straßen näher liegt. Die Absicht steht über der Entfernung.
+    if (PASSIV.has(place.category)) total -= 2.2;
   }
 
   // Ein Park ist kein Allzweck-Füller. Er gewinnt, wenn jemand rausgehen,

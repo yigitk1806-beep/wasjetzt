@@ -149,7 +149,10 @@ function ausklangRollen(ctx: PlanContext): Category[] {
 function ersatzRollen(ctx: PlanContext, haupt: Category[]): Category[] | undefined {
   const { intent } = ctx;
   if (intent.wish) return haupt;
-  if (intent.experience) return dedupe([...ERLEBNIS, 'cinema', 'culture']);
+  // Kein „culture“: Eine Galerie ist keine Action. Lässt sich der Wunsch
+  // nicht erfüllen, sagt der Plan das lieber, als ihn still umzudeuten.
+  // Kino bleibt drin – es ist ein Programmpunkt, kein Ausstellungsbesuch.
+  if (intent.experience) return dedupe([...ERLEBNIS, 'cinema']);
   return dedupe([...haupt, ...TAGESZEIT[ctx.dayPart]]);
 }
 
