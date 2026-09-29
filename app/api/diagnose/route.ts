@@ -5,6 +5,7 @@ import { scorePlace, variantByKey } from '@/engine/scoring';
 import { normalizePlanRequest, normalizePreferences, RequestError } from '@/lib/requestSchema';
 import { getProviders } from '@/providers/registry';
 import { haversineMeters } from '@/lib/geo';
+import { passesHardFilters } from '@/engine/hardFilters';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -58,12 +59,27 @@ export async function POST(request: Request) {
               usedCategories: [],
               profile,
             });
+            // Warum ein hoch bewerteter Ort trotzdem nicht im Plan landet,
+            // ist von außen sonst nicht zu sehen: Das Ranking sagt nur, wie
+            // gut er passt, die harten Filter sagen, ob er überhaupt geht.
+            const filter = passesHardFilters({
+              place,
+              ctx,
+              start: ctx.start,
+              durationMin: slot.targetMinutes,
+              distanceMeters,
+              spentMin: 0,
+              weatherAtStart: ctx.weather.now,
+              reserveMinutes: 0,
+            });
             return {
               name: place.name,
               art: place.kind,
               kategorie: place.category,
               meter: Math.round(distanceMeters),
               punkte: Number(bewertet.total.toFixed(3)),
+              abgelehnt: filter.ok ? null : filter.reason,
+              oeffnungszeiten: place.openingHours ?? null,
               einzeln: Object.fromEntries(
                 Object.entries(bewertet.breakdown).map(([k, v]) => [k, Number((v ?? 0).toFixed(3))]),
               ),
