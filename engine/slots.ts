@@ -13,14 +13,7 @@ const ERLEBNIS: Category[] = ['activity', 'gaming', 'sport'];
 /** Ruhiges Programm: etwas ansehen, etwas trinken, spazieren. */
 const RUHIG: Category[] = ['culture', 'cafe', 'nature', 'wellness'];
 
-/**
- * Alleine unterwegs. Was zu zweit oder in der Gruppe trägt, trägt allein
- * nicht unbedingt – und umgekehrt: Ein Museum, ein Kino oder eine Stunde im
- * Arcade funktionieren allein hervorragend.
- */
-const ALLEIN: Category[] = ['culture', 'cinema', 'gaming', 'cafe', 'sport', 'wellness', 'shopping'];
-
-/** Romantisch, ohne Action-Wunsch. */
+/** „Date" als Stimmung – der Wunsch ist offen, aber nicht beliebig. */
 const ROMANTISCH: Category[] = ['culture', 'cinema', 'wellness', 'activity', 'nature'];
 
 /** Rückfall nach Tageszeit, wenn der Nutzer nichts Näheres gesagt hat. */
@@ -52,17 +45,19 @@ function hauptRollen(ctx: PlanContext): Category[] {
   const { intent } = ctx;
   if (intent.wish) return dedupe([intent.wish, ...verwandte(intent.wish)]);
   if (intent.experience) return dedupe([...ERLEBNIS, ...(intent.outdoor ? DRAUSSEN_ROLLEN : [])]);
-  // Wer „Essen" gewählt hat, bekommt einen Abend ums Essen herum: das
-  // Lokal hat einen eigenen Slot, hier kommt dazu, was dazu passt.
+  // Wer „Essen" gewählt hat, bekommt Gastronomie: das Lokal hat einen eigenen
+  // Slot, hier kommt höchstens ein Café oder eine Bar dazu. Keine Galerie,
+  // kein Kino – danach hat niemand gefragt.
   //
   // Steht bewusst hinter dem Erlebnis: Das Wort „essen" in einem Satz wie
-  // „etwas Action und danach essen" setzt ebenfalls diese Kachel – stünde
+  // „etwas Action und danach essen" setzt ebenfalls diesen Wunsch – stünde
   // die Regel vorn, würde aus der Action eine Bar.
-  if (intent.foodFocus) return dedupe(['cafe', 'bar', 'culture', 'cinema']);
-  if (intent.outdoor) return dedupe([...DRAUSSEN_ROLLEN, 'culture']);
-  if (intent.romantic) return dedupe([...ROMANTISCH, ...TAGESZEIT[ctx.dayPart]]);
-  if (intent.calm) return dedupe([...RUHIG, ...TAGESZEIT[ctx.dayPart]]);
-  if (ctx.request.party === 'solo') return dedupe([...ALLEIN, ...TAGESZEIT[ctx.dayPart]]);
+  if (intent.foodFocus) return dedupe(['cafe', 'bar']);
+  if (intent.outdoor) return DRAUSSEN_ROLLEN;
+  if (intent.romantic) return ROMANTISCH;
+  if (intent.calm) return RUHIG;
+  // Ohne jede Angabe – „Jetzt los" – entscheidet die Tageszeit. Das ist
+  // kein Füller, sondern genau das, wonach gefragt wurde.
   return TAGESZEIT[ctx.dayPart];
 }
 
@@ -86,8 +81,9 @@ function verwandte(wish: Category): Category[] {
       return ['cinema'];
     case 'cinema':
       return ['culture'];
-    case 'nature':
-      return ['sport'];
+    // „Natur" hat keine Verwandten: Eine Boulderhalle ist kein Naturangebot,
+    // auch wenn sie in derselben Kategorie „Sport" steckt wie das Freibad.
+    // Gibt es im Umkreis nichts Grünes, sagt der Plan das lieber.
     default:
       return [];
   }
@@ -112,14 +108,22 @@ function unspezifisch(ctx: PlanContext): boolean {
   );
 }
 
-/** Zweite Station neben der Hauptaktivität – nur, wenn sie etwas beiträgt. */
+/**
+ * Zweite Station neben der Hauptaktivität – nur, wenn sie etwas beiträgt.
+ *
+ * Jeder Eintrag hier muss auf eine Angabe des Nutzers zurückgehen. Es gibt
+ * keine Zeile „und dann noch irgendwas": Eine zweite Station, nach der
+ * niemand gefragt hat, ist ein Füller.
+ */
 function zweiteRollen(ctx: PlanContext, haupt: Category[]): Category[] {
   const { intent } = ctx;
+  // Eine angetippte Kachel ist eine Kategorie, keine Anregung. Was noch
+  // dazukommt, kommt aus derselben Kategorie – wer „Natur" wählt, bekommt
+  // notfalls einen zweiten Park, aber keine Boulderhalle, nur weil die in
+  // derselben Kategorie „Sport" steckt wie das Freibad.
+  if (intent.wish) return haupt;
   const offen: Category[] = [];
-  // Mehrere Wünsche gleichzeitig: Was der Hauptslot nicht abdeckt, kommt hier.
-  if (intent.experience && intent.romantic) offen.push('culture', 'cinema');
   if (intent.outdoor) offen.push(...DRAUSSEN_ROLLEN);
-  if (intent.calm) offen.push('cafe', 'culture');
   if (intent.experience) offen.push(...ERLEBNIS);
   // Ohne bestimmten Wunsch: das, was zu dieser Tageszeit naheliegt.
   if (unspezifisch(ctx)) offen.push(...TAGESZEIT[ctx.dayPart]);
@@ -147,12 +151,11 @@ function ausklangRollen(ctx: PlanContext): Category[] {
  * das nehmen, was zur Tageszeit passt.
  */
 function ersatzRollen(ctx: PlanContext, haupt: Category[]): Category[] | undefined {
-  const { intent } = ctx;
-  if (intent.wish) return haupt;
-  // Kein „culture“: Eine Galerie ist keine Action. Lässt sich der Wunsch
-  // nicht erfüllen, sagt der Plan das lieber, als ihn still umzudeuten.
-  // Kino bleibt drin – es ist ein Programmpunkt, kein Ausstellungsbesuch.
-  if (intent.experience) return dedupe([...ERLEBNIS, 'cinema']);
+  // Hat der Nutzer etwas Bestimmtes gesagt, gibt es kein Ausweichen auf etwas
+  // anderes: Der Plan sagt dann lieber, dass er den Wunsch nicht erfüllen
+  // kann, als ihn still umzudeuten. Die nächstbesten Verwandten – Café/Bar,
+  // Kino/Kultur – stehen bereits in `haupt`.
+  if (!unspezifisch(ctx)) return haupt;
   return dedupe([...haupt, ...TAGESZEIT[ctx.dayPart]]);
 }
 
@@ -306,10 +309,11 @@ export function buildSlots(ctx: PlanContext): Slot[] {
   }
 
   if (slots.length < maxSlots && zweiterSlot) slots.push(zweiterSlot);
-  // Der Ausklang kommt, wenn der Abend danach ist – oder wenn niemand etwas
-  // Bestimmtes wollte und noch Zeit übrig ist. Er bleibt optional: Findet
-  // sich nichts Passendes, endet der Plan eben früher.
-  if (slots.length < maxSlots && (intent.nightcap || unspezifisch(ctx) || intent.calm)) {
+  // Der Ausklang kommt nur, wenn jemand danach gefragt hat („Party", Kachel
+  // „Bar", Bar im Ablauf) – oder wenn gar nichts angegeben wurde und der
+  // Plan ohnehin frei ist. Er bleibt optional: Findet sich nichts Passendes,
+  // endet der Plan eben früher.
+  if (slots.length < maxSlots && (intent.nightcap || unspezifisch(ctx))) {
     slots.push(ausklang);
   }
 

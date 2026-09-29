@@ -112,14 +112,21 @@ export function deriveIntent(request: PlanRequest, tzOffsetMin: number, start: D
     (folge?.some((k) => k === 'action' || k === 'gaming' || k === 'sport') ?? false);
 
 
-  const romantic = moods.has('date') || (request.party === 'partner' && !moods.has('party'));
+  // Romantisch ist, wer „Date" sagt. Zu zweit unterwegs zu sein ist ein
+  // Umstand, kein Wunsch – daraus einen Museumsbesuch abzuleiten hieße, dem
+  // Nutzer etwas zu unterstellen, das er nicht angegeben hat.
+  const romantic = moods.has('date');
   const calm = moods.has('chill');
   const outdoor = moods.has('nature') || wish === 'nature';
 
-  // Ein Absacker passt abends, wenn niemand dabei ist, für den eine Bar
-  // nichts ist – und nur, wenn der Abend überhaupt ein Abend ist.
+  // Ein Absacker ist eine eigene Station und darf deshalb nur entstehen, wenn
+  // jemand danach gefragt hat: „Party" als Stimmung, die Kachel „Bar" oder
+  // eine Bar im gewünschten Ablauf. Früher genügte dafür die Uhrzeit – damit
+  // bekam jeder Abendplan ungefragt eine Bar ans Ende.
   const erwachsen = request.party !== 'family' && (request.age === undefined || request.age >= 18);
-  const nightcap = erwachsen && (hour >= 17 || hour < 3) && !calm;
+  const absackerGewuenscht =
+    moods.has('party') || wish === 'bar' || (folge?.includes('bar') ?? false);
+  const nightcap = erwachsen && absackerGewuenscht && (hour >= 17 || hour < 3);
 
   return {
     food: folge ? folge.includes('food') || food : food,
@@ -130,7 +137,10 @@ export function deriveIntent(request: PlanRequest, tzOffsetMin: number, start: D
     outdoor,
     nightcap,
     wish,
-    foodFocus: request.focusCategory === 'food',
+    // Die Kachel „Essen" und die Stimmung „Essen" sind derselbe Wunsch,
+    // nur zwei Bedienwege. Hingen sie unterschiedlich, bekäme der eine Weg
+    // ein Café als zweite Station und der andere eine Galerie.
+    foodFocus: request.focusCategory === 'food' || moods.has('food'),
     sequence: folge,
     groupSize: request.groupSize,
   };
