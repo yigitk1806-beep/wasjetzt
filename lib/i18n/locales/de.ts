@@ -520,6 +520,7 @@ export const de = {
         ? 'Für einen Punkt sind keine Öffnungszeiten hinterlegt – vorher kurz prüfen.'
         : `Für ${p.count} Punkte sind keine Öffnungszeiten hinterlegt – vorher kurz prüfen.`,
     droppedSlot: () => 'Für einen weiteren Programmpunkt war gerade nichts Passendes offen.',
+    droppedNoTime: () => 'Für einen weiteren Programmpunkt war die Zeit zu knapp – mit mehr Zeit passt noch etwas dazu.',
     noAction: () => 'Eine passende Action-Aktivität finde ich hier gerade nicht – lieber weniger Stationen als eine, die nicht passt.',
     outsideRadius: (p: { radius: string }) =>
       `Im Umkreis von ${p.radius} finde ich nichts Passendes.`,

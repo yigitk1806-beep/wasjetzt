@@ -497,6 +497,7 @@ export const it: Dictionary = {
         ? 'Una tappa non ha orari indicati – controlla prima di andare.'
         : `${p.count} tappe non hanno orari indicati – controlla prima di andare.`,
     droppedSlot: () => 'Non c’era niente di adatto aperto per un’altra attività.',
+    droppedNoTime: () => 'Non c’era tempo per un’altra tappa – con più tempo ci starebbe.',
     noAction: () => 'Al momento non trovo un’attività adatta qui vicino – meglio meno tappe che una che non c’entra.',
     outsideRadius: (p) =>
       `Non trovo niente di adatto entro ${p.radius}.`,

@@ -496,6 +496,7 @@ export const es: Dictionary = {
         ? 'Una parada no tiene horario indicado – compruébalo antes.'
         : `${p.count} paradas no tienen horario indicado – compruébalo antes.`,
     droppedSlot: () => 'No había nada adecuado abierto para una actividad más.',
+    droppedNoTime: () => 'No había tiempo para otra actividad; con más tiempo cabría algo más.',
     noAction: () => 'Ahora mismo no encuentro una actividad que encaje cerca – mejor menos paradas que una que no pega.',
     outsideRadius: (p) =>
       `No encuentro nada adecuado en un radio de ${p.radius}.`,

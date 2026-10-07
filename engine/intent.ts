@@ -1,5 +1,5 @@
 import { localHour } from '@/lib/time';
-import type { Category, PlanRequest, SequenceKind } from '@/types/domain';
+import type { Category, Mood, PlanRequest, SequenceKind } from '@/types/domain';
 
 /**
  * Was die Leute heute gemeinsam erleben wollen – als Struktur, nicht als
@@ -80,6 +80,32 @@ export const DRAUSSEN_ROLLEN: Category[] = ['nature', 'sport'];
 
 const ERLEBNIS_STIMMUNGEN = new Set(['action', 'gaming', 'new', 'party']);
 
+/**
+ * Stimmungen, die genau eine Kategorie benennen.
+ *
+ * Die Kachel „Gaming" und die Stimmung „Gaming" sind derselbe Wunsch, nur
+ * zwei Bedienwege. Hingen sie unterschiedlich, bekäme der eine Weg eine
+ * Spielhalle und der andere eine Boulderhalle – am 07.10.2026 live gemessen
+ * genau so. Dasselbe bei „Natur": ein Park gegen eine Kletterhalle.
+ */
+const STIMMUNG_KATEGORIE: Partial<Record<Mood, Category>> = {
+  gaming: 'gaming',
+  nature: 'nature',
+};
+
+/**
+ * Stimmungen, die absichtlich mehrere Kategorien umfassen. Steht eine davon
+ * dabei, ist der Wunsch breiter gemeint: „Action" heißt Bowling *oder* Kart
+ * *oder* Kletterhalle, nicht eine bestimmte Art.
+ */
+const BREITE_STIMMUNGEN = new Set<Mood>(['action', 'party', 'new']);
+
+/** Benennt die Stimmungsauswahl genau eine Kategorie? */
+function kategorieAusStimmungen(moods: Mood[]): Category | undefined {
+  if (moods.some((m) => BREITE_STIMMUNGEN.has(m))) return undefined;
+  return moods.map((m) => STIMMUNG_KATEGORIE[m]).find((c) => c !== undefined);
+}
+
 /** Zu diesen Zeiten wird üblicherweise gegessen. */
 function istEssenszeit(hour: number): boolean {
   return (hour >= 11 && hour <= 14) || (hour >= 17 && hour <= 21);
@@ -90,7 +116,8 @@ export function deriveIntent(request: PlanRequest, tzOffsetMin: number, start: D
   // „Essen“ ist ein Wunsch nach einem Essen, keine Hauptaktivität – dafür gibt
   // es einen eigenen Slot. Ohne diese Trennung verdrängt ein „… und danach
   // etwas essen“ im Freitext genau das, worum es eigentlich ging.
-  const wish = request.focusCategory === 'food' ? undefined : request.focusCategory;
+  const kachel = request.focusCategory === 'food' ? undefined : request.focusCategory;
+  const wish = kachel ?? kategorieAusStimmungen(request.moods);
   const hour = Math.floor(localHour(start, tzOffsetMin));
 
   // Essen: Der ausdrückliche Schalter gewinnt. Ohne Angabe entscheidet die

@@ -494,6 +494,7 @@ export const en: Dictionary = {
         ? 'One stop has no opening hours listed – check before you go.'
         : `${p.count} stops have no opening hours listed – check before you go.`,
     droppedSlot: () => 'Nothing suitable was open for one more activity.',
+    droppedNoTime: () => 'There was not enough time for one more activity – with a longer window, more would fit.',
     noAction: () => 'I can’t find a fitting activity nearby right now – better fewer stops than one that doesn’t fit.',
     outsideRadius: (p) =>
       `I can’t find anything suitable within ${p.radius}.`,

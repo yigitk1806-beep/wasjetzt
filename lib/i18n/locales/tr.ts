@@ -496,6 +496,7 @@ export const tr: Dictionary = {
         ? 'Bir durağın açılış saatleri yok – gitmeden önce kontrol et.'
         : `${p.count} durağın açılış saatleri yok – gitmeden önce kontrol et.`,
     droppedSlot: () => 'Bir aktivite daha için uygun açık bir yer yoktu.',
+    droppedNoTime: () => 'Bir etkinlik daha için zaman yetmedi – daha uzun sürede biri daha sığar.',
     noAction: () => 'Şu an yakınlarda uygun bir aktivite bulamıyorum – uymayan bir durak yerine daha az durak daha iyi.',
     outsideRadius: (p) =>
       `${p.radius} çevresinde uygun bir şey bulamıyorum.`,

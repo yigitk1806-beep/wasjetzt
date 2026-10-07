@@ -495,6 +495,7 @@ export const fr: Dictionary = {
         ? 'Une étape n’a pas d’horaires indiqués – vérifiez avant d’y aller.'
         : `${p.count} étapes n’ont pas d’horaires indiqués – vérifiez avant d’y aller.`,
     droppedSlot: () => 'Rien d’adapté n’était ouvert pour une activité de plus.',
+    droppedNoTime: () => 'Le temps manquait pour une activité de plus – avec plus de temps, il y aurait de la place.',
     noAction: () => 'Je ne trouve pas d’activité qui convienne dans le coin – mieux vaut moins d’étapes qu’une qui ne va pas.',
     outsideRadius: (p) =>
       `Je ne trouve rien qui convienne dans un rayon de ${p.radius}.`,

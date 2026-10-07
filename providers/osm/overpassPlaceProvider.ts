@@ -24,11 +24,18 @@ type Theme = 'places' | 'sights';
 
 
 /**
- * Suchradius gegen Overpass. Größere Mobilitätsradien (Auto: 16 km) werden
- * hierauf begrenzt – jenseits davon wird die Abfrage in dichten Städten zu
- * langsam für „Jetzt los".
+ * Obergrenze für einen einzelnen Abfragekasten. Jenseits davon wird er auch
+ * in dünn besiedelten Gegenden zu groß für eine interaktive Antwort.
+ *
+ * Vorher standen hier 4500 m – damit blieb jeder gewählte Umkreis darüber
+ * ohne Wirkung. Gemessen am 07.10.2026 in Linum und Groß Woltersdorf: Bei
+ * 20 km Umkreis fand die App dieselben 11 bzw. 3 Orte wie bei 5 km, die
+ * nächste Kleinstadt wurde nie gesucht. Dass der große Kasten eine dichte
+ * Innenstadt überfordern würde, löst nicht diese Grenze, sondern die
+ * Stufenlogik darunter: Dort genügt die erste Stufe, und größere werden gar
+ * nicht erst angefragt.
  */
-const MAX_RADIUS_M = 4500;
+const MAX_RADIUS_M = 25_000;
 
 /**
  * Die Suche beginnt klein und wächst nur, wenn es nötig ist.
@@ -43,7 +50,7 @@ const MAX_RADIUS_M = 4500;
  * Reicht das nicht – Dorf, Stadtrand, weite Anreise –, wächst der Radius
  * stufenweise, und die Ergebnisse werden zusammengeführt.
  */
-const RADIUS_STUFEN = [1100, 2400, MAX_RADIUS_M] as const;
+const RADIUS_STUFEN = [1100, 2400, 4500, 9000, 18_000, MAX_RADIUS_M] as const;
 
 /**
  * Ab wann die nähere Umgebung genügt: genug Orte und genug verschiedene

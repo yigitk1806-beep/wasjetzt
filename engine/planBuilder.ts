@@ -230,6 +230,8 @@ export function homeLeg(
 type BuildResult = {
   steps: PlanStep[];
   droppedSlots: number;
+  /** Mindestens ein Slot blieb leer, weil die Zeit nicht reichte. */
+  zeitKnapp: boolean;
   /** Wünsche, für die sich in der Nähe nichts Passendes fand. */
   unerfuellt: NonNullable<Slot['need']>[];
   /** Positionen des gewünschten Ablaufs, die leer bleiben mussten. */
@@ -260,6 +262,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
   let location: Coordinates = ctx.request.origin;
   let spentMin = 0;
   let dropped = 0;
+  let zeitKnapp = false;
   const unerfuellt: NonNullable<Slot['need']>[] = [];
   const offeneFolge: SequenceKind[] = [];
   let geschlossen: BuildResult['geschlossen'];
@@ -270,7 +273,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
     const isLast = i === slots.length - 1;
     const reserve = reserveMinutesFor(ctx, isLast, location);
 
-    const ablehnung: AblehnungBox = { beste: null };
+    const ablehnung: AblehnungBox = { beste: null, zeitKnapp: false };
     const picked = pickForSlot({
       ctx,
       slot,
@@ -288,6 +291,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
 
     if (!picked) {
       dropped += 1;
+      if (ablehnung.zeitKnapp) zeitKnapp = true;
       // Ein Pflichtwunsch, der sich nicht erfüllen ließ, wird später ehrlich
       // benannt – statt ihn durch irgendeine andere Station zu ersetzen.
       if (!slot.optional && slot.need) unerfuellt.push(slot.need);
@@ -315,7 +319,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
     spentMin += picked.step.price.perPerson?.min ?? 0;
   }
 
-  return { steps, droppedSlots: dropped, unerfuellt, offeneFolge, geschlossen };
+  return { steps, droppedSlots: dropped, zeitKnapp, unerfuellt, offeneFolge, geschlossen };
 }
 
 export function reserveMinutesFor(ctx: PlanContext, isLast: boolean, from: Coordinates): number {
@@ -364,7 +368,16 @@ export type Abgelehnt = { place: Place; closeMin: number; score: number };
  * Objekt sein: `pickFromPool` bekommt eine Kopie des Eingabeobjekts, aber
  * denselben Behälter.
  */
-type AblehnungBox = { beste: Abgelehnt | null };
+type AblehnungBox = {
+  beste: Abgelehnt | null;
+  /**
+   * Ein Kandidat wäre passend und offen gewesen, nur war das Zeitfenster zu
+   * kurz. Ohne diese Unterscheidung behauptet der Plan „nichts Passendes
+   * offen", obwohl in Wahrheit die Zeit nicht reichte – und der Nutzer sucht
+   * den Fehler bei den Öffnungszeiten statt bei der Dauer.
+   */
+  zeitKnapp: boolean;
+};
 
 /**
  * Suchringe um den Startpunkt. WasJetzt sucht zuerst das, was wirklich in
@@ -536,6 +549,11 @@ function pickFromPool(
       reserveMinutes: heim ? heim.durationMin : input.reserveMinutes,
     });
     if (!filter.ok) {
+      // Es lag an der Uhr, nicht am Angebot: Der Ort passte, nur hätte der
+      // Besuch nicht mehr ins Zeitfenster gepasst.
+      if (filter.reason === 'no-time' && input.ablehnung) {
+        input.ablehnung.zeitKnapp = true;
+      }
       // Hat der Ort zu der Zeit wirklich geschlossen? Dann merken, wann er
       // schließt. Maßgeblich sind seine eigenen hinterlegten Zeiten – nicht
       // der Grund, aus dem der Filter zuerst angeschlagen hat. Ein Ort, der
@@ -627,6 +645,7 @@ function buildNotes(
   unerfuellt: NonNullable<Slot['need']>[] = [],
   offeneFolge: SequenceKind[] = [],
   geschlossen?: BuildResult['geschlossen'],
+  zeitKnapp = false,
 ): PlanNote[] {
   const notes: PlanNote[] = [];
   // Maßgeblich ist das Wetter während des Plans, nicht das beim Erstellen.
@@ -717,7 +736,11 @@ function buildNotes(
     notes.push(note(ctx, 'availability', 'noFood'));
   } else if (dropped > 0 && steps.length > 0 && !folgeOffen) {
     // Bei einem gewünschten Ablauf ist oben schon genau gesagt, was fehlt.
-    notes.push(note(ctx, 'availability', 'droppedSlot'));
+    //
+    // Sonst zählt der wahre Grund: War etwas Passendes offen und nur die Zeit
+    // zu kurz, darf hier nicht "nichts offen" stehen. Sonst sucht der Nutzer
+    // den Fehler bei den Öffnungszeiten, obwohl er bloß länger Zeit bräuchte.
+    notes.push(note(ctx, 'availability', zeitKnapp ? 'droppedNoTime' : 'droppedSlot'));
   }
 
   return notes;
@@ -786,7 +809,8 @@ export function buildPlan(
   variant: PlanVariantKey = 'balanced',
 ): Plan | null {
   const profile = variantByKey(variant);
-  let { steps, droppedSlots, unerfuellt, offeneFolge, geschlossen } = buildSteps(ctx, profile);
+  let { steps, droppedSlots, zeitKnapp, unerfuellt, offeneFolge, geschlossen } =
+    buildSteps(ctx, profile);
 
   // Früh am Morgen hat kaum etwas offen. Statt aufzugeben, wird der Beginn
   // stundenweise verschoben – solange noch Zeit im Budget bleibt.
@@ -795,7 +819,7 @@ export function buildPlan(
     verschobenUm += 1;
     const start = new Date(ctx.start.getTime() + verschobenUm * 60 * 60_000);
     if (start >= ctx.latestEnd) break;
-    ({ steps, droppedSlots, unerfuellt, offeneFolge, geschlossen } = buildSteps(
+    ({ steps, droppedSlots, zeitKnapp, unerfuellt, offeneFolge, geschlossen } = buildSteps(
       { ...ctx, start, dayPart: dayPartOf(start, ctx.tzOffsetMin) },
       profile,
     ));
@@ -804,6 +828,7 @@ export function buildPlan(
   if (steps.length === 0) return null;
   const plan = assemblePlan(
     ctx, steps, profile.key, droppedSlots, undefined, unerfuellt, offeneFolge, geschlossen,
+    zeitKnapp,
   );
   if (verschobenUm > 0) {
     plan.notes.unshift(
@@ -824,6 +849,7 @@ export function assemblePlan(
   unerfuellt: NonNullable<Slot['need']>[] = [],
   offeneFolge: SequenceKind[] = [],
   geschlossen?: BuildResult['geschlossen'],
+  zeitKnapp = false,
 ): Plan {
   const startISO = steps[0].startISO;
   const endISO = steps[steps.length - 1].endISO;
@@ -875,7 +901,7 @@ export function assemblePlan(
     // der Regen von jetzt.
     weatherAtCreation: weatherAt(ctx.weather, departISO) ?? ctx.weather.now ?? null,
     createdAtISO: existing?.createdAtISO ?? new Date().toISOString(),
-    notes: buildNotes(ctx, steps, droppedSlots, unerfuellt, offeneFolge, geschlossen),
+    notes: buildNotes(ctx, steps, droppedSlots, unerfuellt, offeneFolge, geschlossen, zeitKnapp),
     meetingPoint: existing?.meetingPoint,
     participants: existing?.participants ?? [],
     containsMockData: steps.some((s) => s.place.source === 'mock'),
@@ -1038,7 +1064,14 @@ function echteWegeImAltenZeitplan(plan: Plan, legs: TravelLeg[], ctx: PlanContex
  * dem Routing kennt nur die fertigen Stationen und kann sie nicht noch
  * einmal herleiten – sie würden sonst stillschweigend verschwinden.
  */
-const BAU_HINWEISE = new Set(['closedAt', 'sequenceMissing', 'noAction', 'noFood', 'droppedSlot']);
+const BAU_HINWEISE = new Set([
+  'closedAt',
+  'sequenceMissing',
+  'noAction',
+  'noFood',
+  'droppedSlot',
+  'droppedNoTime',
+]);
 
 function mergeNotes(alt: PlanNote[], neu: PlanNote[]): PlanNote[] {
   const kennung = (n: PlanNote) => n.key ?? n.text;
