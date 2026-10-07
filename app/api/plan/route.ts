@@ -9,7 +9,7 @@ import {
 } from '@/engine/planBuilder';
 import { variantByKey } from '@/engine/scoring';
 import { buildTour } from '@/engine/tourBuilder';
-import { getProviders } from '@/providers/registry';
+import { demoOrteErlaubt, getProviders, istDatenAusfall } from '@/providers/registry';
 import { normalizePlanRequest, normalizePreferences, RequestError } from '@/lib/requestSchema';
 import { dictionaryFor } from '@/lib/i18n';
 import {
@@ -172,6 +172,22 @@ async function runPipeline(
         : [buildPlan(ctx)];
     const plans = kandidaten.filter((p): p is Plan => Boolean(p));
 
+    // Zweiter Riegel: Selbst wenn auf irgendeinem Weg Demo-Orte in einen
+    // fertigen Plan geraten sind – aus einem älteren Zwischenspeicher etwa –
+    // wird er in Produktion nicht ausgeliefert. Gekennzeichnet oder nicht:
+    // Der Nutzer würde zu Orten laufen, die es so nicht gibt.
+    if (!demoOrteErlaubt() && plans.some((p) => p.containsMockData)) {
+      const t = dictionaryFor(planRequest.language);
+      console.warn('[api/plan] Plan enthielt Demo-Orte und wurde verworfen');
+      return {
+        ok: false,
+        status: 200,
+        error: 'live-data-unavailable',
+        message: t.errors['live-data-unavailable'],
+        understood,
+      };
+    }
+
     if (plans.length === 0) {
       const t = dictionaryFor(planRequest.language);
       // Mit Heimkehrzeit kann das Fenster schlicht zu kurz sein – das sagen
@@ -248,6 +264,18 @@ async function runPipeline(
   } catch (error) {
     if (error instanceof RequestError) {
       return { ok: false, status: 400, error: error.code, message: error.message };
+    }
+    // Die Ortsquelle war nicht erreichbar. Kein Plan ist hier die richtige
+    // Antwort: Ein erfundener Abend wäre schlimmer als keiner.
+    if (istDatenAusfall(error)) {
+      const t = dictionaryFor(typeof input.language === 'string' ? input.language : 'de');
+      console.warn('[api/plan] Ortsdaten nicht erreichbar', error);
+      return {
+        ok: false,
+        status: 200,
+        error: 'live-data-unavailable',
+        message: t.errors['live-data-unavailable'],
+      };
     }
     console.error('[api/plan] unerwarteter Fehler', error);
     return {

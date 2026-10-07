@@ -422,6 +422,7 @@ export const tr: Dictionary = {
   },
 
   errors: {
+    'live-data-unavailable': 'Canlı veriler şu an yüklenemedi. Biraz sonra tekrar dene.',
     'no-plan': 'Şu an buna uygun bir şey bulamıyorum.',
     'no-sights': 'Şu an burada tur için yeterince açık görülecek yer bulamıyorum.',
     'sights-unavailable': 'Görülecek yerler şu an yüklenemedi. Birkaç saniye sonra tekrar dene.',

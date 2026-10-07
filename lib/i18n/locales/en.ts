@@ -422,6 +422,7 @@ export const en: Dictionary = {
   },
 
   errors: {
+    'live-data-unavailable': 'Live data could not be loaded right now. Please try again in a moment.',
     'no-plan': "I can't find anything suitable for that right now.",
     'no-sights': "I can't find enough open sights here for a tour right now.",
     'sights-unavailable': "The sights couldn't be loaded right now. Try again in a few seconds.",

@@ -422,6 +422,8 @@ export const it: Dictionary = {
   },
 
   errors: {
+    'live-data-unavailable':
+      'Non è stato possibile caricare i dati in tempo reale. Riprova tra un istante.',
     'no-plan': 'Al momento non trovo niente di adatto.',
     'no-sights': 'Al momento non trovo abbastanza luoghi aperti qui per un tour.',
     'sights-unavailable': 'Non è stato possibile caricare le cose da vedere. Riprova tra qualche secondo.',

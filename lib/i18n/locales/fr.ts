@@ -422,6 +422,8 @@ export const fr: Dictionary = {
   },
 
   errors: {
+    'live-data-unavailable':
+      'Les données en direct n’ont pas pu être chargées. Réessayez dans un instant.',
     'no-plan': 'Je ne trouve rien de adapté pour le moment.',
     'no-sights': 'Je ne trouve pas assez de sites ouverts ici pour une visite en ce moment.',
     'sights-unavailable': 'Les sites n’ont pas pu être chargés. Réessayez dans quelques secondes.',

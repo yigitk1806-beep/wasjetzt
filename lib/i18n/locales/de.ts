@@ -443,6 +443,7 @@ export const de = {
 
   /** Fehlercodes der Schnittstelle → Text. */
   errors: {
+    'live-data-unavailable': 'Aktuell konnten keine Live-Daten geladen werden. Versuch es gleich noch einmal.',
     'no-plan': 'Dafür finde ich gerade nichts Passendes.',
     'no-sights': 'Hier finde ich gerade zu wenige offene Sehenswürdigkeiten für eine Tour.',
     'sights-unavailable':
