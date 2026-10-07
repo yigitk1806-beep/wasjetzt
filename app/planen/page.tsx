@@ -35,6 +35,21 @@ const PARTIES: Array<{ value: Party; emoji: string }> = [
   { value: 'family', emoji: '👨‍👩‍👧' },
 ];
 
+/**
+ * Wie viele Leute hinter einer Auswahl stecken.
+ *
+ * „Alleine“ und daneben „2 Personen“ ist ein Widerspruch, den die App nicht
+ * auflösen kann: Die Engine rechnet mit der Zahl, die Auswahl bleibt wirkungslos.
+ * Solange niemand die Zahl selbst gesetzt hat, folgt sie deshalb der Auswahl.
+ * Dieselben Vorgaben wie im Server (`defaultGroupSize` in lib/requestSchema).
+ */
+const LEUTE_JE_AUSWAHL: Record<Party, number> = {
+  solo: 1,
+  partner: 2,
+  friends: 3,
+  family: 4,
+};
+
 const TIMES = [{ minutes: 90 }, { minutes: 180 }, { minutes: 300 }, { minutes: 480 }] as const;
 
 /**
@@ -98,6 +113,8 @@ export default function BuildPlanPage() {
   // Hat der Nutzer die Dauer selbst gewählt? Sonst passt sie sich dem
   // Zeitfenster zwischen Start und Heimkehr an.
   const [minutesTouched, setMinutesTouched] = useState(false);
+  /** Hat der Nutzer die Personenzahl selbst gesetzt? Dann bleibt sie stehen. */
+  const [peopleTouched, setPeopleTouched] = useState(false);
   const jetzt = useNowClock();
   const [singleActivity, setSingleActivity] = useState(false);
   const [showMore, setShowMore] = useState(false);
@@ -143,7 +160,11 @@ export default function BuildPlanPage() {
 
   function applyIntent(intent: Record<string, unknown>) {
     if (typeof intent.party === 'string') setParty(intent.party as Party);
-    if (typeof intent.groupSize === 'number') setPeople(intent.groupSize);
+    if (typeof intent.groupSize === 'number') {
+      // Im Freitext genannt heisst ausdruecklich gewollt.
+      setPeopleTouched(true);
+      setPeople(intent.groupSize);
+    }
     if (typeof intent.budgetTotal === 'number') {
       setBudgetTotal(intent.budgetTotal);
       setBudgetFree(intent.budgetTotal === 0);
@@ -318,7 +339,10 @@ export default function BuildPlanPage() {
                 key={option.value}
                 emoji={option.emoji}
                 selected={party === option.value}
-                onClick={() => setParty(option.value)}
+                onClick={() => {
+                  setParty(option.value);
+                  if (!peopleTouched) setPeople(LEUTE_JE_AUSWAHL[option.value]);
+                }}
               >
                 {t.build.parties[option.value]}
               </Chip>
@@ -348,7 +372,13 @@ export default function BuildPlanPage() {
         </Section>
 
         <Section title={t.build.people}>
-          <PeopleField value={people} onChange={setPeople} />
+          <PeopleField
+            value={people}
+            onChange={(n) => {
+              setPeopleTouched(true);
+              setPeople(n);
+            }}
+          />
         </Section>
 
         <Section title={t.build.budget}>

@@ -1,10 +1,33 @@
 'use client';
 
 import { motion } from 'motion/react';
-import { formatClock } from '@/lib/time';
+import { clockFromMinutes, formatClock, openUntil } from '@/lib/time';
 import { useLocale } from '@/components/LocaleProvider';
 import { distance, duration, kind, price, reason } from '@/lib/i18n/format';
 import type { Mobility, Plan, PlanStep } from '@/types/domain';
+
+/**
+ * Die Oeffnungszeit einer Station als Satz - oder null, wenn nichts zu sagen
+ * ist. Dieselbe Herleitung wie in der Tour-Ansicht (components/tour/TourStop):
+ * massgeblich sind allein die hinterlegten Zeiten des Ortes. Fehlen sie, wird
+ * keine erfunden.
+ */
+function oeffnungszeit(
+  step: PlanStep,
+  t: ReturnType<typeof useLocale>['t'],
+  tzOffsetMin?: number,
+): string | null {
+  const hours = step.place.openingHours;
+  if (!hours) return null;
+  const bis = openUntil(hours, new Date(step.startISO), tzOffsetMin ?? 0);
+  if (bis === null) return null;
+  const tage = Object.values(hours);
+  const rundUmDieUhr =
+    tage.length === 7 && tage.every((ivs) => ivs?.some((iv) => iv.openMin === 0 && iv.closeMin >= 1440));
+  if (rundUmDieUhr) return t.plan.open24;
+  if (bis === 1440) return t.plan.openMidnight;
+  return t.plan.openUntil(clockFromMinutes(bis));
+}
 
 const MOBILITY_EMOJI: Record<Mobility, string> = {
   walk: '🚶',
@@ -89,8 +112,16 @@ export function PlanTimeline({
                   📍 {step.place.location.address}
                 </p>
               ) : null}
+              {/*
+                Wann der Ort schliesst, stand bisher nur in der Tour-Ansicht.
+                Fuer den Plan ist es dieselbe Frage: Lohnt der Weg noch?
+              */}
               {!step.openingHoursKnown ? (
                 <p className="mt-1 text-[0.76rem] text-sun-700">{t.plan.hoursUnknown}</p>
+              ) : oeffnungszeit(step, t, tzOffsetMin) ? (
+                <p className="mt-1 text-[0.76rem] text-ink-faint">
+                  🕐 {oeffnungszeit(step, t, tzOffsetMin)}
+                </p>
               ) : null}
 
               <p className="mt-2 text-[0.8rem] leading-snug text-ink-soft">{reason(t, step)}</p>
