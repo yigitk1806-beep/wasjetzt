@@ -11,7 +11,14 @@ import type { Category, Place } from '@/types/domain';
  * Angaben in Stunden. Ein Ende über 24 reicht in die Nacht (27 = 3 Uhr).
  */
 const SINNVOLL: Record<Category, [number, number]> = {
-  food: [11, 23],
+  // Bis 3 Uhr nachts (27). Nicht, weil jedes Restaurant so lange offen haette
+  // – sondern weil die Oeffnungszeiten das entscheiden und nicht dieses
+  // Fenster. Mit 23 fiel jede Gastronomie nach 23 Uhr pauschal durch, auch der
+  // Imbiss, den OpenStreetMap um 02:00 ausdruecklich als geoeffnet fuehrt.
+  // Wer um 2 Uhr Hunger hat, bekommt jetzt den Laden, der wirklich auf hat;
+  // geschlossene Restaurants scheitern weiterhin an Schritt 1 der harten
+  // Filter. Ab 3 Uhr ist Essengehen kein Plan mehr.
+  food: [11, 27],
   cafe: [7.5, 20],
   bar: [16, 27],
   activity: [10, 24],

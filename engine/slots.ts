@@ -1,6 +1,6 @@
 import type { Category, SequenceKind } from '@/types/domain';
 import type { DayPart } from '@/lib/time';
-import { DRAUSSEN_ROLLEN, ERLEBNIS_ROLLEN, FOLGE_ROLLEN } from './intent';
+import { DRAUSSEN_ROLLEN, ERLEBNIS_ROLLEN, FOLGE_ROLLEN, nurEssen } from './intent';
 import type { PlanContext, Slot } from './types';
 
 /**
@@ -52,7 +52,11 @@ function hauptRollen(ctx: PlanContext): Category[] {
   // Steht bewusst hinter dem Erlebnis: Das Wort „essen" in einem Satz wie
   // „etwas Action und danach essen" setzt ebenfalls diesen Wunsch – stünde
   // die Regel vorn, würde aus der Action eine Bar.
-  if (intent.foodFocus) return dedupe(['cafe', 'bar']);
+  //
+  // `nurEssen` deckt denselben Wunsch ueber den Schalter „Essen: Ja" ab.
+  // Ohne ihn fiel die Hauptaktivitaet auf die Tageszeit-Liste zurueck und
+  // machte nachts eine Bar daraus.
+  if (intent.foodFocus || nurEssen(intent)) return dedupe(['cafe', 'bar']);
   if (intent.outdoor) return DRAUSSEN_ROLLEN;
   if (intent.romantic) return ROMANTISCH;
   if (intent.calm) return RUHIG;

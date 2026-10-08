@@ -427,6 +427,8 @@ export const tr: Dictionary = {
   errors: {
     'live-data-unavailable': 'Canlı veriler şu an yüklenemedi. Biraz sonra tekrar dene.',
     'no-plan': 'Şu an buna uygun bir şey bulamıyorum.',
+    'no-food-open': 'Şu an burada yemek için açık bir yer yok. Daha sonra dene ya da çapı büyüt.',
+    'no-food-budget': 'Bu bütçeyle şu an yemek için bir şey bulamıyorum. Biraz daha fazlası ya da daha geniş bir çap yardımcı olur.',
     'no-sights': 'Şu an burada tur için yeterince açık görülecek yer bulamıyorum.',
     'sights-unavailable': 'Görülecek yerler şu an yüklenemedi. Birkaç saniye sonra tekrar dene.',
     'window-too-short': (time) =>
@@ -504,6 +506,7 @@ export const tr: Dictionary = {
     outsideRadius: (p) =>
       `${p.radius} çevresinde uygun bir şey bulamıyorum.`,
     noFood: () => 'Şu an yakınlarda uygun bir yemek yeri bulamıyorum.',
+    budgetTooLow: () => 'Şu an bu bütçeye uyan bir şey bulamıyorum.',
     closedAt: (p) =>
       `${p.place} saat ${p.time} itibarıyla kapanıyor. „${p.name}“ için başka bir yer arayayım mı?`,
     sequenceMissing: (p) =>

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getPlanStore } from '@/db/planStore';
 import {
+  type Ablehngruende,
   buildPlan,
   buildPlanVariants,
   createPlanContext,
@@ -9,6 +10,7 @@ import {
 } from '@/engine/planBuilder';
 import { variantByKey } from '@/engine/scoring';
 import { buildTour } from '@/engine/tourBuilder';
+import { nurEssen } from '@/engine/intent';
 import { demoOrteErlaubt, getProviders, istDatenAusfall } from '@/providers/registry';
 import { normalizePlanRequest, normalizePreferences, RequestError } from '@/lib/requestSchema';
 import { dictionaryFor } from '@/lib/i18n';
@@ -165,11 +167,13 @@ async function runPipeline(
 
     const isTour = planRequest.mode === 'tour';
     const wantVariants = input.variants !== false && !isTour;
+    // Kommt kein Plan zustande, steht hier hinterher, woran es lag.
+    const gruende: Ablehngruende = {};
     const kandidaten = isTour
       ? [buildTour(ctx)]
       : wantVariants
-        ? buildPlanVariants(ctx)
-        : [buildPlan(ctx)];
+        ? buildPlanVariants(ctx, gruende)
+        : [buildPlan(ctx, 'balanced', gruende)];
     const plans = kandidaten.filter((p): p is Plan => Boolean(p));
 
     // Zweiter Riegel: Selbst wenn auf irgendeinem Weg Demo-Orte in einen
@@ -214,6 +218,14 @@ async function runPipeline(
           message: t.errors['short-window'](formatDuration(minutes, planRequest.language)),
           understood,
         };
+      }
+      // War Essen der einzige Wunsch, ist auch der Grund eindeutig - und
+      // eine brauchbare Auskunft wert. "Nichts Passendes" liesse offen,
+      // woran es lag.
+      if (!isTour && nurEssen(ctx.intent)) {
+        // Lag es am Budget, hilft "nichts offen" niemandem weiter.
+        const code = gruende.zuTeuer ? 'no-food-budget' : 'no-food-open';
+        return { ok: false, status: 200, error: code, message: t.errors[code], understood };
       }
       // Eigener Code bei Tour-Ausfall, damit die Oberfläche es einmal still
       // neu versuchen kann.

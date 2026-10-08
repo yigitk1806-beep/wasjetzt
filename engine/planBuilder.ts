@@ -35,7 +35,7 @@ import { planSummary, planTitle, stepReason, tourSummary, tourTitle } from './na
 import { begruendung, dict, note } from './texts';
 import { scorePlace, VARIANTS, variantByKey } from './scoring';
 import { buildSlots } from './slots';
-import { capPerPerson, deriveIntent } from './intent';
+import { capPerPerson, deriveIntent, nurEssen } from './intent';
 import type { PlanContext, Slot, VariantProfile } from './types';
 import { weatherModeOf } from './weatherRules';
 
@@ -230,8 +230,8 @@ export function homeLeg(
 type BuildResult = {
   steps: PlanStep[];
   droppedSlots: number;
-  /** Mindestens ein Slot blieb leer, weil die Zeit nicht reichte. */
-  zeitKnapp: boolean;
+  /** Woran die leer gebliebenen Slots gescheitert sind. */
+  gruende: Ablehngruende;
   /** Wünsche, für die sich in der Nähe nichts Passendes fand. */
   unerfuellt: NonNullable<Slot['need']>[];
   /** Positionen des gewünschten Ablaufs, die leer bleiben mussten. */
@@ -262,7 +262,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
   let location: Coordinates = ctx.request.origin;
   let spentMin = 0;
   let dropped = 0;
-  let zeitKnapp = false;
+  const gruende: Ablehngruende = {};
   const unerfuellt: NonNullable<Slot['need']>[] = [];
   const offeneFolge: SequenceKind[] = [];
   let geschlossen: BuildResult['geschlossen'];
@@ -273,7 +273,9 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
     const isLast = i === slots.length - 1;
     const reserve = reserveMinutesFor(ctx, isLast, location);
 
-    const ablehnung: AblehnungBox = { beste: null, zeitKnapp: false };
+    const ablehnung: AblehnungBox = {
+      beste: null, zeitKnapp: false, ausserhalbRadius: false, zuTeuer: false,
+    };
     const picked = pickForSlot({
       ctx,
       slot,
@@ -291,7 +293,9 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
 
     if (!picked) {
       dropped += 1;
-      if (ablehnung.zeitKnapp) zeitKnapp = true;
+      if (ablehnung.zeitKnapp) gruende.zeitKnapp = true;
+      if (ablehnung.ausserhalbRadius) gruende.ausserhalbRadius = true;
+      if (ablehnung.zuTeuer) gruende.zuTeuer = true;
       // Ein Pflichtwunsch, der sich nicht erfüllen ließ, wird später ehrlich
       // benannt – statt ihn durch irgendeine andere Station zu ersetzen.
       if (!slot.optional && slot.need) unerfuellt.push(slot.need);
@@ -319,7 +323,7 @@ function buildSteps(ctx: PlanContext, profile: VariantProfile): BuildResult {
     spentMin += picked.step.price.perPerson?.min ?? 0;
   }
 
-  return { steps, droppedSlots: dropped, zeitKnapp, unerfuellt, offeneFolge, geschlossen };
+  return { steps, droppedSlots: dropped, gruende, unerfuellt, offeneFolge, geschlossen };
 }
 
 export function reserveMinutesFor(ctx: PlanContext, isLast: boolean, from: Coordinates): number {
@@ -368,16 +372,25 @@ export type Abgelehnt = { place: Place; closeMin: number; score: number };
  * Objekt sein: `pickFromPool` bekommt eine Kopie des Eingabeobjekts, aber
  * denselben Behälter.
  */
-type AblehnungBox = {
-  beste: Abgelehnt | null;
-  /**
-   * Ein Kandidat wäre passend und offen gewesen, nur war das Zeitfenster zu
-   * kurz. Ohne diese Unterscheidung behauptet der Plan „nichts Passendes
-   * offen", obwohl in Wahrheit die Zeit nicht reichte – und der Nutzer sucht
-   * den Fehler bei den Öffnungszeiten statt bei der Dauer.
-   */
-  zeitKnapp: boolean;
+/**
+ * Woran ein Wunsch gescheitert ist.
+ *
+ * Ohne diese Unterscheidung raet der Plan: Bisher stand bei gewaehltem
+ * Umkreis immer „Im Umkreis von X finde ich nichts Passendes", auch wenn in
+ * Wahrheit die Uhrzeit oder das Budget schuld war. Ein falscher Grund ist
+ * schlimmer als keiner - der Nutzer dreht dann am Radius, der gar nicht das
+ * Problem ist.
+ */
+export type Ablehngruende = {
+  /** Passend und offen, aber das Zeitfenster war zu kurz. */
+  zeitKnapp?: boolean;
+  /** Passend, aber ausserhalb des gewaehlten Umkreises. */
+  ausserhalbRadius?: boolean;
+  /** Passend, aber teurer als das Budget hergibt. */
+  zuTeuer?: boolean;
 };
+
+type AblehnungBox = { beste: Abgelehnt | null } & Required<Ablehngruende>;
 
 /**
  * Suchringe um den Startpunkt. WasJetzt sucht zuerst das, was wirklich in
@@ -549,10 +562,14 @@ function pickFromPool(
       reserveMinutes: heim ? heim.durationMin : input.reserveMinutes,
     });
     if (!filter.ok) {
-      // Es lag an der Uhr, nicht am Angebot: Der Ort passte, nur hätte der
-      // Besuch nicht mehr ins Zeitfenster gepasst.
-      if (filter.reason === 'no-time' && input.ablehnung) {
-        input.ablehnung.zeitKnapp = true;
+      // Warum es nicht ging, wird hier festgehalten - der Hinweis am Ende
+      // soll den echten Grund nennen und nicht den wahrscheinlichsten.
+      if (input.ablehnung) {
+        if (filter.reason === 'no-time') input.ablehnung.zeitKnapp = true;
+        if (filter.reason === 'outside-radius' || filter.reason === 'too-far') {
+          input.ablehnung.ausserhalbRadius = true;
+        }
+        if (filter.reason === 'too-expensive') input.ablehnung.zuTeuer = true;
       }
       // Hat der Ort zu der Zeit wirklich geschlossen? Dann merken, wann er
       // schließt. Maßgeblich sind seine eigenen hinterlegten Zeiten – nicht
@@ -645,7 +662,7 @@ function buildNotes(
   unerfuellt: NonNullable<Slot['need']>[] = [],
   offeneFolge: SequenceKind[] = [],
   geschlossen?: BuildResult['geschlossen'],
-  zeitKnapp = false,
+  gruende: Ablehngruende = {},
 ): PlanNote[] {
   const notes: PlanNote[] = [];
   // Maßgeblich ist das Wetter während des Plans, nicht das beim Erstellen.
@@ -721,26 +738,38 @@ function buildNotes(
 
   // Ein Wunsch, der sich nicht erfüllen ließ, wird benannt – nicht durch
   // eine beliebige andere Station kaschiert.
-  // Hat der Nutzer den Umkreis selbst gewählt und blieb etwas leer, ist das
-  // die wahrscheinlichste Ursache – und die einzige, die er ändern kann.
+  //
+  // Der Grund muss der sein, den wir wirklich kennen. Vorher stand hier bei
+  // jedem gewaehlten Umkreis „Im Umkreis von X finde ich nichts Passendes" -
+  // auch dann, wenn in Wahrheit die Uhrzeit oder das Budget schuld war. Der
+  // Nutzer dreht dann am Radius, der gar nicht das Problem ist. Gemessen,
+  // was die harten Filter gemeldet haben, schlaegt geraten.
   const umkreis = ctx.request.searchRadiusMeters;
+  const etwasFehlt = unerfuellt.length > 0 || folgeOffen;
   if (konkret) {
-    // Schon gesagt, und zwar genauer.
-  } else if (umkreis && (unerfuellt.length > 0 || folgeOffen)) {
+    // Schon gesagt, und zwar genauer: Ort und Schliesszeit.
+  } else if (etwasFehlt && gruende.ausserhalbRadius && umkreis) {
     notes.push(
       note(ctx, 'availability', 'outsideRadius', { radius: distanz(ctx, umkreis) }),
     );
+  } else if (etwasFehlt && gruende.zuTeuer) {
+    notes.push(note(ctx, 'availability', 'budgetTooLow'));
+  } else if (etwasFehlt && gruende.zeitKnapp) {
+    notes.push(note(ctx, 'availability', 'droppedNoTime'));
   } else if (unerfuellt.includes('experience')) {
     notes.push(note(ctx, 'availability', 'noAction'));
   } else if (unerfuellt.includes('food')) {
     notes.push(note(ctx, 'availability', 'noFood'));
+  } else if (etwasFehlt && umkreis) {
+    // Nichts Genaueres bekannt, aber der Umkreis ist das Einzige, woran der
+    // Nutzer selbst drehen kann.
+    notes.push(
+      note(ctx, 'availability', 'outsideRadius', { radius: distanz(ctx, umkreis) }),
+    );
   } else if (dropped > 0 && steps.length > 0 && !folgeOffen) {
-    // Bei einem gewünschten Ablauf ist oben schon genau gesagt, was fehlt.
-    //
-    // Sonst zählt der wahre Grund: War etwas Passendes offen und nur die Zeit
-    // zu kurz, darf hier nicht "nichts offen" stehen. Sonst sucht der Nutzer
-    // den Fehler bei den Öffnungszeiten, obwohl er bloß länger Zeit bräuchte.
-    notes.push(note(ctx, 'availability', zeitKnapp ? 'droppedNoTime' : 'droppedSlot'));
+    // Ein optionaler Slot blieb leer. War etwas Passendes offen und nur die
+    // Zeit zu kurz, darf hier nicht "nichts offen" stehen.
+    notes.push(note(ctx, 'availability', gruende.zeitKnapp ? 'droppedNoTime' : 'droppedSlot'));
   }
 
   return notes;
@@ -807,9 +836,14 @@ function permutationen<T>(liste: T[]): T[][] {
 export function buildPlan(
   ctx: PlanContext,
   variant: PlanVariantKey = 'balanced',
+  /**
+   * Wird gefuellt, wenn kein Plan zustande kommt. Ohne das weiss die Route
+   * nur, DASS nichts ging - und muesste den Grund raten.
+   */
+  gruendeOut?: Ablehngruende,
 ): Plan | null {
   const profile = variantByKey(variant);
-  let { steps, droppedSlots, zeitKnapp, unerfuellt, offeneFolge, geschlossen } =
+  let { steps, droppedSlots, gruende, unerfuellt, offeneFolge, geschlossen } =
     buildSteps(ctx, profile);
 
   // Früh am Morgen hat kaum etwas offen. Statt aufzugeben, wird der Beginn
@@ -819,16 +853,29 @@ export function buildPlan(
     verschobenUm += 1;
     const start = new Date(ctx.start.getTime() + verschobenUm * 60 * 60_000);
     if (start >= ctx.latestEnd) break;
-    ({ steps, droppedSlots, zeitKnapp, unerfuellt, offeneFolge, geschlossen } = buildSteps(
+    ({ steps, droppedSlots, gruende, unerfuellt, offeneFolge, geschlossen } = buildSteps(
       { ...ctx, start, dayPart: dayPartOf(start, ctx.tzOffsetMin) },
       profile,
     ));
   }
 
-  if (steps.length === 0) return null;
+  if (steps.length === 0) {
+    if (gruendeOut) Object.assign(gruendeOut, gruende);
+    return null;
+  }
+
+  // Wer nur essen wollte, bekommt kein Ersatzprogramm. Blieb das Lokal leer,
+  // bestuenden die uebrigen Stationen aus Cafe oder Bar - nach denen hat
+  // niemand gefragt, und als einziger Programmpunkt waeren sie eine Antwort
+  // auf eine andere Frage. Dann lieber ehrlich kein Plan.
+  if (nurEssen(ctx.intent) && unerfuellt.includes('food')) {
+    if (gruendeOut) Object.assign(gruendeOut, gruende);
+    return null;
+  }
+
   const plan = assemblePlan(
     ctx, steps, profile.key, droppedSlots, undefined, unerfuellt, offeneFolge, geschlossen,
-    zeitKnapp,
+    gruende,
   );
   if (verschobenUm > 0) {
     plan.notes.unshift(
@@ -849,7 +896,7 @@ export function assemblePlan(
   unerfuellt: NonNullable<Slot['need']>[] = [],
   offeneFolge: SequenceKind[] = [],
   geschlossen?: BuildResult['geschlossen'],
-  zeitKnapp = false,
+  gruende: Ablehngruende = {},
 ): Plan {
   const startISO = steps[0].startISO;
   const endISO = steps[steps.length - 1].endISO;
@@ -901,7 +948,7 @@ export function assemblePlan(
     // der Regen von jetzt.
     weatherAtCreation: weatherAt(ctx.weather, departISO) ?? ctx.weather.now ?? null,
     createdAtISO: existing?.createdAtISO ?? new Date().toISOString(),
-    notes: buildNotes(ctx, steps, droppedSlots, unerfuellt, offeneFolge, geschlossen, zeitKnapp),
+    notes: buildNotes(ctx, steps, droppedSlots, unerfuellt, offeneFolge, geschlossen, gruende),
     meetingPoint: existing?.meetingPoint,
     participants: existing?.participants ?? [],
     containsMockData: steps.some((s) => s.place.source === 'mock'),
@@ -915,12 +962,12 @@ export function assemblePlan(
  * Varianten, die inhaltlich identisch zur Hauptvariante sind, werden verworfen –
  * drei fast gleiche Karten helfen niemandem.
  */
-export function buildPlanVariants(ctx: PlanContext): Plan[] {
+export function buildPlanVariants(ctx: PlanContext, gruendeOut?: Ablehngruende): Plan[] {
   const plans: Plan[] = [];
   const signatures = new Set<string>();
 
   for (const profile of VARIANTS) {
-    const plan = buildPlan(ctx, profile.key);
+    const plan = buildPlan(ctx, profile.key, gruendeOut);
     if (!plan) continue;
     const signature = plan.steps.map((s) => s.place.id).join('|');
     if (signatures.has(signature)) continue;
@@ -1071,6 +1118,11 @@ const BAU_HINWEISE = new Set([
   'noFood',
   'droppedSlot',
   'droppedNoTime',
+  // Fehlten hier: Der Hinweis entstand beim Bauen und wurde eine Zeile
+  // spaeter weggeworfen. Da die Oberflaeche immer einen Umkreis sendet, hat
+  // ihn in der Praxis nie jemand gesehen.
+  'outsideRadius',
+  'budgetTooLow',
 ]);
 
 function mergeNotes(alt: PlanNote[], neu: PlanNote[]): PlanNote[] {

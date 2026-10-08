@@ -427,6 +427,8 @@ export const en: Dictionary = {
   errors: {
     'live-data-unavailable': 'Live data could not be loaded right now. Please try again in a moment.',
     'no-plan': "I can't find anything suitable for that right now.",
+    'no-food-open': 'Nothing suitable to eat is open here right now. Try later or widen the radius.',
+    'no-food-budget': 'Nothing to eat here fits that budget right now. A little more, or a wider radius, would help.',
     'no-sights': "I can't find enough open sights here for a tour right now.",
     'sights-unavailable': "The sights couldn't be loaded right now. Try again in a few seconds.",
     'window-too-short': (time) =>
@@ -502,6 +504,7 @@ export const en: Dictionary = {
     outsideRadius: (p) =>
       `I can’t find anything suitable within ${p.radius}.`,
     noFood: () => 'I can’t find a fitting place to eat nearby right now.',
+    budgetTooLow: () => 'Nothing here fits that budget right now.',
     closedAt: (p) =>
       `${p.place} closes at ${p.time}. Shall I look for something else for “${p.name}”?`,
     sequenceMissing: (p) =>

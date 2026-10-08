@@ -428,6 +428,8 @@ export const fr: Dictionary = {
     'live-data-unavailable':
       'Les données en direct n’ont pas pu être chargées. Réessayez dans un instant.',
     'no-plan': 'Je ne trouve rien de adapté pour le moment.',
+    'no-food-open': 'Rien d’ouvert pour manger dans le coin. Réessaye plus tard ou élargis le rayon.',
+    'no-food-budget': 'Rien à manger dans ce budget pour le moment. Un peu plus, ou un rayon plus large, aiderait.',
     'no-sights': 'Je ne trouve pas assez de sites ouverts ici pour une visite en ce moment.',
     'sights-unavailable': 'Les sites n’ont pas pu être chargés. Réessayez dans quelques secondes.',
     'window-too-short': (time) =>
@@ -503,6 +505,7 @@ export const fr: Dictionary = {
     outsideRadius: (p) =>
       `Je ne trouve rien qui convienne dans un rayon de ${p.radius}.`,
     noFood: () => 'Je ne trouve pas de restaurant qui convienne dans le coin.',
+    budgetTooLow: () => 'Rien ne correspond à ce budget pour le moment.',
     closedAt: (p) =>
       `${p.place} ferme à ${p.time}. Je cherche autre chose pour « ${p.name} » ?`,
     sequenceMissing: (p) =>

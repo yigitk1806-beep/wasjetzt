@@ -174,6 +174,29 @@ export function deriveIntent(request: PlanRequest, tzOffsetMin: number, start: D
 }
 
 /**
+ * Essen ist das Einzige, was der Nutzer gesagt hat.
+ *
+ * Dann ist das Lokal der Plan und nicht eine Station darin. Ohne diese
+ * Unterscheidung fällt die Hauptaktivität auf die Tageszeit-Liste zurück –
+ * nachts auf `['bar','gaming','activity']`. Gemessen am 08.10.2026 um 02:00
+ * Uhr führte das dazu, dass auf „Essen: Ja" ein Pub als einzige Station kam,
+ * während der Essenswunsch still unter den Tisch fiel.
+ *
+ * Die Kachel „Essen" (`foodFocus`) meint dasselbe; sie hatte den Zweig schon.
+ */
+export function nurEssen(intent: PlanIntent): boolean {
+  return (
+    intent.foodExplicit &&
+    intent.wish === undefined &&
+    !intent.experience &&
+    !intent.romantic &&
+    !intent.calm &&
+    !intent.outdoor &&
+    (intent.sequence === undefined || intent.sequence.length === 0)
+  );
+}
+
+/**
  * Budget pro Person aus dem Gesamtbudget der Gruppe.
  *
  * „2 Personen · 100 €" heißt 100 € für den Abend, nicht 100 € je Kopf. Die

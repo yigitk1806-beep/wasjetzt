@@ -448,6 +448,8 @@ export const de = {
   errors: {
     'live-data-unavailable': 'Aktuell konnten keine Live-Daten geladen werden. Versuch es gleich noch einmal.',
     'no-plan': 'Dafür finde ich gerade nichts Passendes.',
+    'no-food-open': 'Zum Essen hat hier gerade nichts Passendes offen. Versuch es später oder wähle einen größeren Umkreis.',
+    'no-food-budget': 'Für dieses Budget finde ich hier gerade nichts zum Essen. Mit etwas mehr oder in einem größeren Umkreis sieht es besser aus.',
     'no-sights': 'Hier finde ich gerade zu wenige offene Sehenswürdigkeiten für eine Tour.',
     'sights-unavailable':
       'Die Sehenswürdigkeiten konnten gerade nicht geladen werden. Versuch es in ein paar Sekunden nochmal.',
@@ -528,6 +530,7 @@ export const de = {
     outsideRadius: (p: { radius: string }) =>
       `Im Umkreis von ${p.radius} finde ich nichts Passendes.`,
     noFood: () => 'Ein passendes Lokal finde ich hier gerade nicht.',
+    budgetTooLow: () => 'Für dieses Budget finde ich hier gerade nichts Passendes.',
     closedAt: (p: { place: string; time: string; name: string }) =>
       `${p.place} schließt um ${p.time} Uhr. Soll ich für „${p.name}“ etwas anderes suchen?`,
     sequenceMissing: (p: { name: string }) =>
