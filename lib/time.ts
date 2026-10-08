@@ -120,11 +120,33 @@ export function seasonOf(date: Date, lat: number): Season {
 
 export type DayPart = 'morning' | 'midday' | 'afternoon' | 'evening' | 'night';
 
+/**
+ * Welche Tageszeit ist das – aus Sicht eines Menschen, der ausgehen will.
+ *
+ * Die Grenzen:
+ *   00:00–05:59  night
+ *   06:00–11:59  morning
+ *   12:00–17:59  afternoon
+ *   18:00–22:59  evening
+ *   23:00–23:59  night
+ *
+ * Vorher begann „morning" um Mitternacht und „night" galt nur für die eine
+ * Stunde vor zwölf. Gemessen am 08.10.2026: Um 00:06 suchte „Jetzt los"
+ * deshalb Cafés, Kultur und Parks, alle 143 Kandidaten fielen durch die
+ * Tageszeitprüfung, und der Nutzer bekam „nichts Passendes" – obwohl es
+ * für die Nacht eine eigene Liste gibt.
+ *
+ * `midday` ist mit diesen Grenzen nicht mehr erreichbar. Das ist so
+ * gewollt: Mittag und Nachmittag unterscheiden sich für einen Freizeitplan
+ * kaum, und eine Grenze weniger ist eine Grenze weniger, die falsch liegen
+ * kann. Der Wert bleibt im Typ, damit ältere gespeicherte Pläne weiter
+ * lesbar sind.
+ */
 export function dayPartOf(date: Date, offsetMin: number): DayPart {
   const h = Math.floor(localHour(date, offsetMin));
-  if (h < 11) return 'morning';
-  if (h < 14) return 'midday';
-  if (h < 17) return 'afternoon';
+  if (h < 6) return 'night';
+  if (h < 12) return 'morning';
+  if (h < 18) return 'afternoon';
   if (h < 23) return 'evening';
   return 'night';
 }

@@ -41,6 +41,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       intent: ctx.intent,
+      // Welche Tageszeit die Engine angenommen hat. Von außen sonst nur am
+      // Plantitel ablesbar – und den gibt es nur, wenn ein Plan zustande kam.
+      dayPart: ctx.dayPart,
       radiusMeters: ctx.radiusMeters,
       budgetCapProPerson: ctx.budgetCap,
       poolGroesse: ctx.pool.length,
