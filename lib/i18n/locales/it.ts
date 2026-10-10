@@ -113,6 +113,7 @@ export const it: Dictionary = {
     foodYes: 'Sì',
     foodNo: 'No',
     foodAuto: 'Se ci sta',
+    foodBySequence: 'La sequenza impostata determina le tappe.',
     mood: 'Umore',
     more: 'Altre impostazioni',
     mobility: 'Come vi spostate?',

@@ -128,6 +128,7 @@ export const de = {
     foodYes: 'Ja',
     foodNo: 'Nein',
     foodAuto: 'Wenn es passt',
+    foodBySequence: 'Der festgelegte Ablauf bestimmt die Stationen.',
     mood: 'Stimmung',
     more: 'Mehr Einstellungen',
     mobility: 'Wie unterwegs?',
@@ -469,8 +470,13 @@ export const de = {
 
   /** Plantitel – vom Server als Schlüssel geliefert. */
   titles: {
+    // Ganze Wendungen statt Possessiv plus Substantiv: „Nacht" ist feminin
+    // und ergab zusammengesetzt „Dein Nacht". Alle anderen Sprachen hinterlegen
+    // die Phrasen ohnehin vollständig – Deutsch war die Ausnahme.
     plan: (party: Party, dayPart: DayPart) =>
-      `${party === 'solo' ? 'Dein' : 'Euer'} ${{ morning: 'Vormittag', midday: 'Mittag', afternoon: 'Nachmittag', evening: 'Abend', night: 'Nacht' }[dayPart]}`,
+      party === 'solo'
+        ? { morning: 'Dein Vormittag', midday: 'Dein Mittag', afternoon: 'Dein Nachmittag', evening: 'Dein Abend', night: 'Deine Nacht' }[dayPart]
+        : { morning: 'Euer Vormittag', midday: 'Euer Mittag', afternoon: 'Euer Nachmittag', evening: 'Euer Abend', night: 'Eure Nacht' }[dayPart],
     tour: (place: string | null) => (place ? `${place} entdecken` : 'Deine Umgebung entdecken'),
   },
 

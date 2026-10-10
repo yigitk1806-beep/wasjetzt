@@ -113,6 +113,7 @@ export const tr: Dictionary = {
     foodYes: 'Evet',
     foodNo: 'Hayır',
     foodAuto: 'Uyarsa',
+    foodBySequence: 'Belirlenen sıra durakları belirler.',
     mood: 'Ruh hali',
     more: 'Daha fazla ayar',
     mobility: 'Nasıl gidiyorsunuz?',

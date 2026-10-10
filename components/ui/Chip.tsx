@@ -26,6 +26,9 @@ export function Chip({
         'tap inline-flex shrink-0 items-center gap-1.5 rounded-2xl px-3.5 py-2.5',
         'text-[0.9rem] font-medium leading-none',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas',
+        // Deaktiviert muss man sehen koennen - sonst waere ein toter
+        // Schalter schlimmer als ein wirkungsloser.
+        'disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none',
         selected
           ? 'bg-ink text-white shadow-lift'
           : tone === 'soft'

@@ -196,6 +196,12 @@ export default function BuildPlanPage() {
   // Zeitfenster zwischen Start und Heimkehr – daran richtet sich die Dauer
   // aus, solange der Nutzer sie nicht selbst gewählt hat.
   const startMin = startMinutes(startAt, jetzt);
+  /**
+   * Ab zwei Positionen ist der Ablauf die Struktur des Plans; der
+   * Essenswunsch wird von der Engine dann nicht mehr ausgewertet.
+   */
+  const ablaufBestimmtStationen = sequence.length >= 2;
+
   const fensterMin =
     homeBy && startMin !== null ? (((minutesOf(homeBy) - startMin) % 1440) + 1440) % 1440 : null;
   useEffect(() => {
@@ -448,18 +454,43 @@ export default function BuildPlanPage() {
           <SequenceEditor value={sequence} onChange={setSequence} />
         </Section>
 
+        {/*
+          Steht ein Ablauf mit mindestens zwei Positionen, bestimmt er die
+          Stationen - die Engine fragt den Essenswunsch dann gar nicht erst ab
+          (siehe buildSlots, Abzweig `ausFolge`). Ein Schalter, der nichts tut,
+          ist schlimmer als keiner: Hier wird er deshalb abgeschaltet und der
+          Grund danebengeschrieben. An der Engine aendert das nichts.
+        */}
         <Section title={t.build.food}>
           <div className="flex flex-wrap gap-2">
-            <Chip emoji="🍽️" selected={wantsFood === true} onClick={() => setWantsFood(true)}>
+            <Chip
+              emoji="🍽️"
+              selected={wantsFood === true}
+              disabled={ablaufBestimmtStationen}
+              onClick={() => setWantsFood(true)}
+            >
               {t.build.foodYes}
             </Chip>
-            <Chip selected={wantsFood === false} onClick={() => setWantsFood(false)}>
+            <Chip
+              selected={wantsFood === false}
+              disabled={ablaufBestimmtStationen}
+              onClick={() => setWantsFood(false)}
+            >
               {t.build.foodNo}
             </Chip>
-            <Chip selected={wantsFood === undefined} onClick={() => setWantsFood(undefined)}>
+            <Chip
+              selected={wantsFood === undefined}
+              disabled={ablaufBestimmtStationen}
+              onClick={() => setWantsFood(undefined)}
+            >
               {t.build.foodAuto}
             </Chip>
           </div>
+          {ablaufBestimmtStationen ? (
+            <p className="mt-2 text-[0.8rem] leading-snug text-ink-muted">
+              {t.build.foodBySequence}
+            </p>
+          ) : null}
         </Section>
 
         <Section title={t.build.mood}>

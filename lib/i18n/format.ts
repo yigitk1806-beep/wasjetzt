@@ -189,8 +189,14 @@ export function legacyTitle(title: string): { key: 'plan' | 'tour'; params: Reco
   if (title === 'Deine Umgebung entdecken') return { key: 'tour', params: { place: '' } };
   const tour = /^(.+) entdecken$/.exec(title);
   if (tour) return { key: 'tour', params: { place: tour[1] } };
-  const plan = /^(Dein|Euer) (Vormittag|Mittag|Nachmittag|Abend|Nacht)$/.exec(title);
-  if (plan) return { key: 'plan', params: { party: plan[1] === 'Dein' ? 'solo' : 'friends', dayPart: DE_DAYPARTS[plan[2]] } };
+  // „Deine"/„Eure" sind die heutigen Formen, „Dein"/„Euer" die bis Oktober
+  // 2026 gespeicherten. Beide müssen lesbar bleiben: Geteilte Pläne leben
+  // sieben Tage, und ein alter Titel darf nicht stumm verschwinden.
+  const plan = /^(Dein|Deine|Euer|Eure) (Vormittag|Mittag|Nachmittag|Abend|Nacht)$/.exec(title);
+  if (plan) {
+    const solo = plan[1] === 'Dein' || plan[1] === 'Deine';
+    return { key: 'plan', params: { party: solo ? 'solo' : 'friends', dayPart: DE_DAYPARTS[plan[2]] } };
+  }
   return null;
 }
 
