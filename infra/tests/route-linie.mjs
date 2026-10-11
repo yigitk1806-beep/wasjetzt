@@ -15,11 +15,18 @@
  *    die Route riss an jeder Station sichtbar auf. Geprueft wird deshalb
  *    die Reihenfolge im DOM: erst alle Raender, dann alle Linien.
  *
- * Der zweite Teil braucht einen Browser und laeuft nur mit PRUEFE_DOM=1
- * zusammen mit dem Browserwerkzeug; ohne das meldet er sich als nicht
- * messbar, statt still durchzugehen.
+ * Teil 2 ist NICHT automatisiert, und das ist eine bewusste Luecke statt
+ * eines gruenen Hakens: Im Projekt ist keine Browser- oder DOM-Umgebung
+ * installiert (kein Playwright, kein Puppeteer, kein jsdom), und Leaflet
+ * zeichnet erst im Browser. Eine Pruefung, die die erwartete Reihenfolge
+ * aus einer vorbereiteten Datei abliest, waere ein Schein-Test - sie
+ * bestuende auch dann, wenn die Karte kaputt ist. Der Test gibt deshalb
+ * die Handanweisung aus und zaehlt sie nicht als bestanden.
+ *
+ * Aufruf:  node infra/tests/route-linie.mjs
+ * Server:  npm run dev   (Port 3000; andere Basis ueber BASIS=...)
  */
-const B = process.env.BASIS ?? 'http://localhost:3123';
+const B = process.env.BASIS ?? 'http://localhost:3000';
 const ORT = { lat: 52.5375925, lon: 13.3864862, language: 'de', tzOffsetMin: 120, mobility: 'walk' };
 
 let ok = 0, fail = 0, infra = 0; const bad = [];
@@ -28,7 +35,23 @@ const chk = (n, c, i = '') => {
   if (c) { ok++; console.log(`   PASS  ${n}${i ? ' – ' + i : ''}`); }
   else { fail++; bad.push(`${n}${i ? ' – ' + i : ''}`); console.log(`   FAIL  ${n}${i ? ' – ' + i : ''}`); }
 };
-const post = (u, b) => fetch(B + u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then((r) => r.json());
+/**
+ * Ein nicht erreichbarer Server ist kein Testergebnis, sondern ein
+ * Aufrufsfehler - er bricht hier mit lesbarer Meldung und Exit-Code 1 ab,
+ * statt einen Stacktrace auszuwerfen.
+ */
+function abbruch(fehler) {
+  console.error(`\nServer nicht erreichbar: ${B}`);
+  console.error(`Grund: ${fehler instanceof Error ? fehler.message : String(fehler)}`);
+  console.error('Starte ihn mit `npm run dev` (Port 3000) oder setze BASIS, z. B.');
+  console.error('  BASIS=http://localhost:3123 node infra/tests/route-linie.mjs');
+  process.exit(1);
+}
+
+const post = (u, b) =>
+  fetch(B + u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) })
+    .then((r) => r.json())
+    .catch(abbruch);
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Dieselbe Dekodierung wie in lib/wege.ts – bewusst nachgebaut, damit der
@@ -115,23 +138,20 @@ if (!p) {
     `${nachher.filter((l) => l.geometry).length} von ${echt.length} mit Geometrie`);
 }
 
-console.log('\n### 4 · Zeichenreihenfolge auf der Karte');
-if (process.env.PRUEFE_DOM !== '1') {
-  chk('Erst alle weissen Raender, dann alle Linien', null, 'braucht einen Browser, PRUEFE_DOM=1');
-} else {
-  // Die Reihenfolge wird vom Browserwerkzeug in eine Datei geschrieben.
-  const { readFileSync } = await import('node:fs');
-  let reihen = null;
-  try { reihen = JSON.parse(readFileSync(process.env.DOM_DATEI, 'utf8')); } catch { /* nicht da */ }
-  if (!reihen) chk('Erst alle weissen Raender, dann alle Linien', null, 'keine Messung gefunden');
-  else {
-    // Kein weisser Rand darf nach der ersten farbigen Linie kommen.
-    const ersteFarbige = reihen.findIndex((x) => x.stroke !== '#ffffff');
-    const randDanach = reihen.slice(ersteFarbige + 1).some((x) => x.stroke === '#ffffff');
-    chk('Erst alle weissen Raender, dann alle Linien', ersteFarbige >= 0 && !randDanach,
-      reihen.map((x) => (x.stroke === '#ffffff' ? 'Rand' : 'Linie')).join(' '));
-  }
-}
+console.log('\n### 4 · Zeichenreihenfolge auf der Karte - NICHT automatisiert');
+console.log('   Im Projekt ist keine Browser- oder DOM-Umgebung installiert, und');
+console.log('   Leaflet zeichnet erst im Browser. Diese Pruefung von Hand:');
+console.log('');
+console.log('     1. Plan oder Tour oeffnen:  ' + B + '/plan/<id>');
+console.log('     2. In der Browserkonsole:');
+console.log("        [...document.querySelectorAll('.leaflet-overlay-pane path')]");
+console.log("          .map(p => p.getAttribute('stroke'))");
+console.log('     3. Erwartet: erst alle #ffffff, danach alle farbigen.');
+console.log('        Ein #ffffff NACH einer farbigen Linie ist der Fehler.');
+console.log('');
+console.log('   Nicht als bestanden gezaehlt - siehe infra/tests/README.md.');
 
 console.log(`\n==== ${ok} PASS / ${fail} FAIL${infra ? ` / ${infra} nicht messbar` : ''} ====`);
 bad.forEach((x) => console.log('  ! ' + x));
+// Fehlgeschlagene Faelle muessen den Aufrufer erreichen, nicht nur die Konsole.
+if (fail > 0) process.exit(1);
