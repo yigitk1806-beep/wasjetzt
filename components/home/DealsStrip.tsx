@@ -49,8 +49,8 @@ export function DealsStrip({ coords, onPick }: Props) {
         {isMock ? <span className="text-[0.7rem] text-ink-faint">{t.common.demo}</span> : null}
       </div>
 
-      <div className="-mx-[1.15rem] edge-fade">
-        <div className="scroll-x px-[1.15rem]">
+      <div className="edge-fade">
+        <div className="scroll-x">
           {deals.map((deal, index) => (
             <motion.button
               key={deal.place.id}

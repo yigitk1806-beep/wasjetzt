@@ -22,8 +22,8 @@ type Props = {
 export function CategoryTiles({ onPick, disabled }: Props) {
   const { t } = useLocale();
   return (
-    <div className="-mx-[1.15rem] edge-fade">
-      <div className="scroll-x px-[1.15rem]">
+    <div className="edge-fade">
+      <div className="scroll-x">
         {TILES.map((tile, index) => (
           <motion.button
             key={tile.category}

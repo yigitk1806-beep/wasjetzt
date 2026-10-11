@@ -369,8 +369,8 @@ export function TourView({ initialPlan }: Props) {
 
         <section className="space-y-2.5">
           <h2 className="text-[0.95rem] font-bold tracking-tight">{t.tour.adjustTitle}</h2>
-          <div className="-mx-[1.15rem] edge-fade">
-            <div className="scroll-x px-[1.15rem]">
+          <div className="edge-fade">
+            <div className="scroll-x">
               {ANPASSEN.map((option) => (
                 <Chip
                   key={option.tweak}
