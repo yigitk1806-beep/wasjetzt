@@ -40,14 +40,29 @@ const UNKNOWN_HOURS_WINDOW = { fromHour: 9, toHour: 22 };
 export function passesHardFilters(input: FilterInput): FilterResult {
   const { place, ctx, start, durationMin, distanceMeters, spentMin, weatherAtStart } = input;
 
-  // 0. Passt die Art des Ortes zur Tageszeit? Eine Kneipe mit „24/7" ist
+  // 0. Glücksspiel - ausnahmslos, vor allem anderen.
+  //
+  //    Keine Abstufung nach Alter, Stimmung oder Wunsch: WasJetzt steht
+  //    Kindern und Jugendlichen offen, und eine Freizeit-App hat kein
+  //    Geschäft damit, zum Glücksspiel zu schicken. Ein Freitext wie
+  //    "Casino" oder "Spielothek" hebt die Sperre nicht auf.
+  //
+  //    Die Prüfung steht hier und nicht in der Auswahlschleife, damit jeder
+  //    Weg sie trifft - Plan, Alternativvorschlag, Station ersetzen, neue
+  //    Zeiten - und damit die Diagnose den Grund nennen kann, statt den Ort
+  //    stillschweigend verschwinden zu lassen.
+  if (place.gambling) {
+    return { ok: false, reason: 'gambling' };
+  }
+
+  // 1. Passt die Art des Ortes zur Tageszeit? Eine Kneipe mit „24/7" ist
   //    um 6:40 Uhr zwar offen, aber kein Vorschlag. Das gilt auch für den
   //    zweiten, aufgeweichten Suchdurchlauf – der darf es nicht umgehen.
   if (!fitsTimeOfDay(place, start, ctx.tzOffsetMin)) {
     return { ok: false, reason: 'time-of-day' };
   }
 
-  // 1. Geöffnet? – oder zumindest plausibel, wenn wir es nicht wissen.
+  // 2. Geöffnet? – oder zumindest plausibel, wenn wir es nicht wissen.
   if (place.openingHours) {
     if (!isOpenDuring(place.openingHours, start, durationMin, ctx.tzOffsetMin)) {
       return { ok: false, reason: 'closed' };
@@ -67,12 +82,12 @@ export function passesHardFilters(input: FilterInput): FilterResult {
     if (!insideWindow) return { ok: false, reason: 'hours-unknown' };
   }
 
-  // 2. In Reichweite?
+  // 3. In Reichweite?
   if (distanceMeters > ctx.radiusMeters) {
     return { ok: false, reason: 'too-far' };
   }
 
-  // 2b. Und innerhalb des gewählten Umkreises um den Startpunkt. Der Schritt
+  // 3b. Und innerhalb des gewählten Umkreises um den Startpunkt. Der Schritt
   //     oben misst ab der vorherigen Station – ohne diese zweite Prüfung
   //     könnte ein Plan Schritt für Schritt aus dem Umkreis herauswandern.
   //     Gemessen wird Luftlinie; der tatsächliche Weg darf länger sein.

@@ -30,6 +30,41 @@ function istInfrastruktur(tags: OsmTags): boolean {
   return false;
 }
 
+/**
+ * Orte, deren Hauptzweck Glücksspiel um Geld ist.
+ *
+ * WasJetzt empfiehlt davon nichts - nicht nach Alter gestaffelt, nicht auf
+ * Wunsch, nie. Die App steht Kindern und Jugendlichen offen, und eine
+ * Freizeit-App hat kein Geschäft damit, zum Glücksspiel zu schicken.
+ *
+ * Erkannt wird an den OSM-Tags, nicht am Namen: Ein Lokal namens
+ * "Spielhalle" ist womöglich eine Kneipe, und eine Spielbank heißt oft
+ * nach ihrem Ort. Geprüft werden deshalb alle Tags, die in OSM für
+ * Glücksspiel stehen - auch dann, wenn ein Ort zusätzlich ein harmloses
+ * Tag trägt und über dieses in die Abfrage gerät.
+ *
+ * Bewusst NICHT dabei: `amusement_arcade` (Videospielhalle), Bowling,
+ * Minigolf, Trampolinpark. Das sind gewöhnliche Freizeitangebote. Auch das
+ * Wort "Gaming" allein sagt nichts - entscheidend ist das Tag.
+ */
+export function istGluecksspiel(tags: OsmTags): boolean {
+  // Spielbank und Wett-/Glücksspielbetrieb.
+  if (tags.amenity === 'casino' || tags.amenity === 'gambling') return true;
+  // Spielhalle, Spielothek - Geldautomaten, in Deutschland ab 18.
+  if (tags.leisure === 'adult_gaming_centre') return true;
+  // Wettbüro, Lottoladen.
+  if (tags.shop === 'bookmaker' || tags.shop === 'lottery') return true;
+  // Der Zusatz `gambling=*` (slot_machines, bingo, betting, lottery ...)
+  // hängt an Orten, die noch keinen eigenen Haupttyp bekommen haben.
+  //
+  // `gambling=no` bedeutet das Gegenteil: Eine Kneipe sagt damit
+  // ausdrücklich, dass es bei ihr keine Automaten gibt. Sie deshalb zu
+  // sperren wäre genau verkehrt.
+  const zusatz = tags.gambling?.trim().toLowerCase();
+  if (zusatz && zusatz !== 'no' && zusatz !== 'none') return true;
+  return false;
+}
+
 export function classify(tags: OsmTags): ProfileKey | null {
   if (istInfrastruktur(tags)) return null;
 
@@ -88,8 +123,14 @@ export function classify(tags: OsmTags): ProfileKey | null {
       case 'miniature_golf':
         return 'minigolf';
       case 'amusement_arcade':
-      case 'adult_gaming_centre':
         return 'arcade';
+      // Zwei grundverschiedene Orte, die bis Oktober 2026 dasselbe Profil
+      // teilten: `amusement_arcade` ist die Videospielhalle,
+      // `adult_gaming_centre` die Spielhalle mit Geldautomaten. Letztere
+      // wurde dadurch als familientaugliches "Arcade" ohne Altersgrenze
+      // vorgeschlagen - gemessen am 10.10.2026 einer Familie mit Kind.
+      case 'adult_gaming_centre':
+        return 'spielhalle';
       case 'trampoline_park':
         return 'trampoline';
       case 'bowling_centre':
@@ -228,13 +269,20 @@ export function buildOverpassQuery(lat: number, lon: number, radiusMeters: numbe
 
   // Kontingente: genug Auswahl je Art, zusammen klein genug für eine schnelle
   // Antwort. Mehr als ein paar hundert Lokale in Laufweite braucht kein Plan.
+  //
+  // Glücksspiel wird hier gar nicht erst erfragt: weder `amenity=casino`
+  // noch `leisure=adult_gaming_centre`. Das spart in dichten Lagen Plätze
+  // im Kontingent für Orte, die ohnehin aussortiert würden. Verlassen darf
+  // man sich darauf nicht - ein Ort kann über ein zweites Tag hereinkommen
+  // und trägt dann trotzdem `gambling`. Die verbindliche Sperre steht in
+  // `passesHardFilters`.
   const bloecke: Array<[string, number]> = [
     [
-      'nwr["amenity"~"^(restaurant|cafe|fast_food|ice_cream|bar|pub|biergarten|nightclub|cinema|theatre|arts_centre|casino|marketplace|public_bath)$"]["name"]',
+      'nwr["amenity"~"^(restaurant|cafe|fast_food|ice_cream|bar|pub|biergarten|nightclub|cinema|theatre|arts_centre|marketplace|public_bath)$"]["name"]',
       300,
     ],
     [
-      'nwr["leisure"~"^(park|garden|nature_reserve|bowling_alley|bowling_centre|escape_game|miniature_golf|amusement_arcade|adult_gaming_centre|trampoline_park|water_park|swimming_pool|ice_rink|dance|beach_resort|sports_centre)$"]["name"]',
+      'nwr["leisure"~"^(park|garden|nature_reserve|bowling_alley|bowling_centre|escape_game|miniature_golf|amusement_arcade|trampoline_park|water_park|swimming_pool|ice_rink|dance|beach_resort|sports_centre)$"]["name"]',
       150,
     ],
     ['nwr["tourism"~"^(museum|gallery|viewpoint|zoo|aquarium|theme_park|attraction)$"]["name"]', 150],

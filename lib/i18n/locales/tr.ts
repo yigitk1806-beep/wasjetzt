@@ -631,6 +631,7 @@ export const tr: Dictionary = {
     Schwimmbad: 'Yüzme havuzu',
     Sehenswürdigkeit: 'Görülecek yer',
     Spielbank: 'Kumarhane',
+    Spielhalle: 'Kumar salonu (18+)',
     Sportzentrum: 'Spor merkezi',
     Stadttor: 'Şehir kapısı',
     Strand: 'Plaj',
