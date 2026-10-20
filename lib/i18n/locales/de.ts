@@ -672,6 +672,7 @@ export const de = {
     Schwimmbad: 'Schwimmbad',
     Sehenswürdigkeit: 'Sehenswürdigkeit',
     Spielbank: 'Spielbank',
+    Spielhalle: 'Spielhalle',
     Sportzentrum: 'Sportzentrum',
     Stadttor: 'Stadttor',
     Strand: 'Strand',

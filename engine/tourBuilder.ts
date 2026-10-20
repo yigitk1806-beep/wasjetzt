@@ -115,6 +115,11 @@ function candidatePool(ctx: PlanContext, settings: TourSettings): Place[] {
 
   return [...byId.values()].filter((place) => {
     if (ausgeschlossen.has(place.id)) return false;
+    // Glücksspiel ist auch auf einer Tour ausgeschlossen. Die Tour baut sich
+    // ihre Kandidaten selbst zusammen und läuft nicht durch
+    // `passesHardFilters` - ohne diese Zeile wäre sie die eine Lücke in der
+    // Sperre.
+    if (place.gambling) return false;
     if (settings.freeOnly && place.price.level > 0) return false;
     return true;
   });

@@ -641,6 +641,7 @@ export const it: Dictionary = {
     Schwimmbad: 'Piscina',
     Sehenswürdigkeit: 'Attrazione',
     Spielbank: 'Casinò',
+    Spielhalle: 'Sala giochi (18+)',
     Sportzentrum: 'Centro sportivo',
     Stadttor: 'Porta cittadina',
     Strand: 'Spiaggia',

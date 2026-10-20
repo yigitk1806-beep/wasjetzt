@@ -44,6 +44,10 @@ export async function POST(request: Request) {
       // Welche Tageszeit die Engine angenommen hat. Von außen sonst nur am
       // Plantitel ablesbar – und den gibt es nur, wenn ein Plan zustande kam.
       dayPart: ctx.dayPart,
+      // Wie viele Gluecksspielstaetten im Umkreis liegen und gesperrt
+      // wurden. Null heisst nicht "keine da" - sie koennen auch schon beim
+      // Abruf weggefallen sein, weil die Abfrage sie nicht mehr erfragt.
+      gluecksspielGesperrt: ctx.pool.filter((place) => place.gambling).length,
       radiusMeters: ctx.radiusMeters,
       budgetCapProPerson: ctx.budgetCap,
       poolGroesse: ctx.pool.length,
@@ -51,6 +55,11 @@ export async function POST(request: Request) {
         const kandidaten = ctx.pool
           .filter((place) => slot.roles.includes(place.category))
           .filter((place) => !place.sightseeing || ctx.request.focusCategory === 'culture')
+          // Glueckspielstaetten werden hier bewusst NICHT vorab entfernt:
+          // Sie sollen in der Diagnose auftauchen, aber mit dem Grund
+          // "gambling" aus `passesHardFilters`. Stillschweigendes
+          // Verschwinden waere genau das, was man beim Pruefen nicht sehen
+          // kann.
           .map((place) => {
             const distanceMeters = haversineMeters(ctx.request.origin, place.location);
             const bewertet = scorePlace({

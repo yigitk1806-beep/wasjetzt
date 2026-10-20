@@ -176,6 +176,11 @@ export type Place = {
    */
   sightseeing?: boolean;
   /**
+   * Glücksspiel um Geld – Spielhalle, Spielbank, Wettbüro. Kommt in keinen
+   * Plan und in keine Tour, unabhängig von Alter, Stimmung und Wunsch.
+   */
+  gambling?: boolean;
+  /**
    * Verknüpfter Wikipedia-Artikel aus OSM, z. B. "de:Brandenburger Tor".
    * Quelle für Vorschaubild und Kurzbeschreibung in der Tour-Ansicht.
    */

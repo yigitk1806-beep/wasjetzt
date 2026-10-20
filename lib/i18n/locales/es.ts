@@ -640,6 +640,7 @@ export const es: Dictionary = {
     Schwimmbad: 'Piscina',
     Sehenswürdigkeit: 'Lugar de interés',
     Spielbank: 'Casino',
+    Spielhalle: 'Salón de juego (18+)',
     Sportzentrum: 'Centro deportivo',
     Stadttor: 'Puerta de la ciudad',
     Strand: 'Playa',

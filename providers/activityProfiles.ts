@@ -46,6 +46,15 @@ export type ActivityProfile = {
    * Lückenfüller in einen Abend, bei dem jemand etwas erleben wollte.
    */
   sightseeing?: boolean;
+  /**
+   * Glücksspiel um Geld. Solche Orte kommen in keinen Plan - nicht nach
+   * Alter gestaffelt, nicht auf Wunsch, nie. Die Altersgrenze allein
+   * genügte dafür nicht: Sie hält Kinder draußen, sie hält aber niemanden
+   * davon ab, sich eine Spielhalle vorschlagen zu lassen.
+   *
+   * Die Sperre selbst steht in `passesHardFilters`.
+   */
+  gambling?: boolean;
 };
 
 export type ProfileKey = keyof typeof ACTIVITY_PROFILES;
@@ -232,11 +241,21 @@ export const ACTIVITY_PROFILES = {
     typicalDurationMin: 90, indoorOutdoor: 'indoor', ...INDOOR, bestSeasons: [],
     scores: { romantic: 0.7, action: 0.7, family: 0.3, chill: 0.3, novelty: 0.7, social: 0.9 },
   },
+  /**
+   * Spielbank (OSM `amenity=casino`).
+   *
+   * Altersgrenze gab es hier schon immer. Das Kennzeichen `gambling` kam
+   * nach: Der Jugendschutz hält Kinder draußen, er schützt aber niemanden
+   * davor, dass eine Spielbank als „Action“ vorgeschlagen wird. Das Profil
+   * bleibt bestehen, damit ein so getaggter Ort sicher erkannt und
+   * aussortiert wird - vorgeschlagen wird er nicht mehr.
+   */
   casino: {
     category: 'activity', kind: 'Spielbank', emoji: '🎰', priceLevel: 3,
     typicalDurationMin: 120, indoorOutdoor: 'indoor', ...INDOOR, bestSeasons: [],
     scores: { romantic: 0.3, action: 0.6, family: 0, chill: 0.2, novelty: 0.6, social: 0.6 },
     minAge: 18,
+    gambling: true,
   },
 
   // ----------------------------------------------------------------- Gaming
@@ -245,6 +264,20 @@ export const ACTIVITY_PROFILES = {
     typicalDurationMin: 75, indoorOutdoor: 'indoor', ...INDOOR,
     bestSeasons: ['autumn', 'winter'],
     scores: { romantic: 0.3, action: 0.75, family: 0.8, chill: 0.3, novelty: 0.7, social: 0.9 },
+  },
+  /**
+   * Spielhalle mit Geldautomaten (OSM `leisure=adult_gaming_centre`).
+   *
+   * Teilte sich früher das Profil mit der Videospielhalle und erschien
+   * dadurch als "Arcade 🎮" mit Familientauglichkeit 0,8 und ohne
+   * Altersgrenze. In Deutschland sind Spielhallen ab 18.
+   */
+  spielhalle: {
+    category: 'gaming', kind: 'Spielhalle', emoji: '🎰', priceLevel: 2,
+    typicalDurationMin: 60, indoorOutdoor: 'indoor', ...INDOOR, bestSeasons: [],
+    scores: { romantic: 0.1, action: 0.4, family: 0, chill: 0.2, novelty: 0.3, social: 0.4 },
+    minAge: 18,
+    gambling: true,
   },
   vr: {
     category: 'gaming', kind: 'VR-Arena', emoji: '🕶️', priceLevel: 2,

@@ -27,8 +27,8 @@ export function RadiusField({ value, onChange }: Props) {
 
   return (
     <div className="space-y-2">
-      <div className="-mx-[1.15rem] edge-fade">
-        <div className="scroll-x gap-2 px-[1.15rem]">
+      <div className="edge-fade">
+        <div className="scroll-x gap-2">
           {RADIEN.map((m) => (
             <Chip key={m} selected={value === m} onClick={() => onChange(m)}>
               {distance(t, m)}

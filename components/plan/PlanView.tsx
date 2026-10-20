@@ -351,8 +351,8 @@ export function PlanView({ initialPlan }: Props) {
         {plan.siblings && plan.siblings.length > 1 ? (
           <section className="space-y-2.5">
             <h2 className="text-[0.95rem] font-bold tracking-tight">{t.plan.variants}</h2>
-            <div className="-mx-[1.15rem] edge-fade">
-              <div className="scroll-x px-[1.15rem]">
+            <div className="edge-fade">
+              <div className="scroll-x">
                 {plan.siblings.map((sibling) => (
                   <button
                     key={sibling.id}

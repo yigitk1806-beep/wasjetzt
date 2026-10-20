@@ -82,7 +82,12 @@ export function PlanMap({ origin, steps, mobility, returnHome, home, originLabel
 
       const alle: LeafletNS.LatLngTuple[] = [[origin.lat, origin.lon]];
 
-      const strecke = (
+      // Erst alle Strecken sammeln, dann zeichnen. Der Grund steht unten:
+      // Rand und Linie müssen in zwei Durchgängen aufs Blatt.
+      type Strecke = { punkte: LeafletNS.LatLngTuple[]; echt: boolean; rueckweg: boolean };
+      const strecken: Strecke[] = [];
+
+      const sammle = (
         from: Coordinates,
         to: Coordinates,
         geometry: string | undefined,
@@ -92,31 +97,44 @@ export function PlanMap({ origin, steps, mobility, returnHome, home, originLabel
         const punkte: LeafletNS.LatLngTuple[] =
           echt && echt.length >= 2 ? echt : [[from.lat, from.lon], [to.lat, to.lon]];
         alle.push(...punkte);
-
-        // Heller Rand unter der Linie – hebt sie von Straßen gleicher Farbe ab.
-        if (echt) {
-          L.polyline(punkte, { color: '#ffffff', weight: 7, opacity: 0.9, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(map);
-        }
-        L.polyline(punkte, {
-          color: rueckweg ? '#8b807a' : ORANGE,
-          weight: echt ? 4 : 3,
-          opacity: 0.9,
-          lineCap: 'round',
-          lineJoin: 'round',
-          // Gestrichelt heißt: hier ist kein echter Weg bekannt.
-          dashArray: echt ? (rueckweg ? '6 7' : undefined) : '2 8',
-          interactive: false,
-        }).addTo(map);
+        strecken.push({ punkte, echt: Boolean(echt && echt.length >= 2), rueckweg });
       };
 
       let from = origin;
       for (const step of steps) {
         if (step.travelFromPrevious.durationMin > 0 || step.travelFromPrevious.distanceMeters > 0) {
-          strecke(from, step.place.location, step.travelFromPrevious.geometry);
+          sammle(from, step.place.location, step.travelFromPrevious.geometry);
         }
         from = step.place.location;
       }
-      if (returnHome) strecke(from, home ?? origin, returnHome.geometry, true);
+      if (returnHome) sammle(from, home ?? origin, returnHome.geometry, true);
+
+      // Zwei Durchgänge, und das ist der ganze Punkt: Leaflet zeichnet später
+      // Hinzugefügtes obenauf. Wurden Rand und Linie je Teilstrecke zusammen
+      // gezeichnet, legte sich der 7px breite weiße Rand der NÄCHSTEN Strecke
+      // über die 4px schmale orange Linie der vorigen. Überall, wo zwei
+      // Strecken sich berühren oder dieselbe Straße benutzen – an jeder
+      // Station, bei jedem Hin- und Rückweg – riss die Route dadurch sichtbar
+      // auf. Erst alle Ränder, dann alle Linien.
+      for (const s of strecken) {
+        if (!s.echt) continue;
+        L.polyline(s.punkte, {
+          color: '#ffffff', weight: 7, opacity: 0.9,
+          lineCap: 'round', lineJoin: 'round', interactive: false,
+        }).addTo(map);
+      }
+      for (const s of strecken) {
+        L.polyline(s.punkte, {
+          color: s.rueckweg ? '#8b807a' : ORANGE,
+          weight: s.echt ? 4 : 3,
+          opacity: 0.9,
+          lineCap: 'round',
+          lineJoin: 'round',
+          // Gestrichelt heißt: hier ist kein echter Weg bekannt.
+          dashArray: s.echt ? (s.rueckweg ? '6 7' : undefined) : '2 8',
+          interactive: false,
+        }).addTo(map);
+      }
 
       // Startpunkt – klar erkennbar, weil an ihm der ganze Plan hängt.
       L.marker([origin.lat, origin.lon], {

@@ -4,7 +4,7 @@ import { InMemoryPlaceCache, type PlaceCacheStore } from '@/providers/placeCache
 import type { PlaceProvider, PlaceQuery } from '@/providers/types';
 import type { Place, PriceInfo, PriceLevel } from '@/types/domain';
 import { parseOpeningHours } from './openingHours';
-import { buildOverpassQuery, classify, type OsmTags } from './taxonomy';
+import { buildOverpassQuery, classify, istGluecksspiel, type OsmTags } from './taxonomy';
 import { hostVon, overpassZiele, type OverpassZiel } from './overpassEndpoints';
 import { buildSightsQuery, classifySight, isNotable, sightProfile, themesFor } from './sights';
 
@@ -67,8 +67,19 @@ const GENUG_ARTEN = 4;
 const SIGHTS_RADIUS_M = 2500;
 const SIGHTS_LIMIT = 500;
 
-/** Erhöhen, sobald sich ändert, welche Orte wie eingeordnet werden. */
-const CACHE_VERSION = 'v9';
+/**
+ * Erhöhen, sobald sich ändert, welche Orte wie eingeordnet werden.
+ *
+ * v11: Glücksspiel wird vollständig ausgeschlossen. `adult_gaming_centre`
+ * ist nicht mehr „Arcade", sondern „Spielhalle"; Spielhalle und Spielbank
+ * tragen `gambling`, und das Kennzeichen hängt jetzt zusätzlich an den
+ * OSM-Tags (auch `amenity=gambling`, `shop=bookmaker`, `shop=lottery`,
+ * `gambling=*`). Ohne diesen Schritt lägen die alten Einordnungen noch 24
+ * Stunden im Zwischenspeicher: Die Spielhalle käme weiter als
+ * familientaugliches Arcade zurück, und Orte, die erst über die Tags
+ * auffallen, kämen ganz ohne Kennzeichen.
+ */
+const CACHE_VERSION = 'v11';
 
 /**
  * Zellgröße des Caches je Stufe. Die nahe Stufe braucht ein feines Raster
@@ -494,6 +505,9 @@ function toPlace(element: OverpassElement): Place | null {
     // Für die Tourplanung: Orte ohne Wikipedia-Artikel werden zu Geheimtipps.
     notable: isNotable(tags),
     sightseeing: profile.sightseeing,
+    // Profil ODER Tags: Ein Ort kann über ein harmloses Zweit-Tag in die
+    // Abfrage geraten und trotzdem eine Spielhalle sein.
+    gambling: profile.gambling || istGluecksspiel(tags),
     minAge: minAgeOf(tags, profile.minAge),
     bookable: profile.bookable,
   };
@@ -551,6 +565,10 @@ function toSight(element: OverpassElement): Place | null {
     source: 'openstreetmap',
     themes: themesFor(key, tags),
     notable,
+    // Auch eine Sehenswürdigkeit kann eine Spielbank sein: Berühmte Häuser
+    // tragen in OSM oft `tourism=attraction` neben `amenity=casino`. Ohne
+    // dieses Kennzeichen käme so ein Ort über die Tour herein.
+    gambling: istGluecksspiel(tags) || undefined,
     wikipedia: wikipediaOf(tags),
     prominence: prominenceOf(tags),
   };
