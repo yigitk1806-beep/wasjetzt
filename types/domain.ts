@@ -181,6 +181,16 @@ export type Place = {
    */
   gambling?: boolean;
   /**
+   * Der Ort stammt aus dem Zwischenspeicher und ist älter als die normale
+   * Haltbarkeit – ausgeliefert, weil OpenStreetMap gerade nicht erreichbar
+   * war. Es ist ein echter Ort, nur womöglich nicht mehr aktuell: Er kann
+   * inzwischen geschlossen haben oder andere Öffnungszeiten haben.
+   *
+   * Nicht zu verwechseln mit `source: 'mock'` – das wären erfundene Orte,
+   * die in Produktion gar nicht erst ausgeliefert werden.
+   */
+  stale?: boolean;
+  /**
    * Verknüpfter Wikipedia-Artikel aus OSM, z. B. "de:Brandenburger Tor".
    * Quelle für Vorschaubild und Kurzbeschreibung in der Tour-Ansicht.
    */
@@ -320,6 +330,11 @@ export type Plan = {
   participants: Participant[];
   /** true, wenn mindestens ein Schritt aus Mock-Daten stammt. */
   containsMockData: boolean;
+  /**
+   * true, wenn mindestens ein Schritt aus veralteten Zwischenspeicherdaten
+   * stammt. Die Orte sind echt, ihr Stand ist aber nicht der von heute.
+   */
+  containsStaleData: boolean;
   /** Alternative Varianten desselben Wunsches, zum direkten Umschalten. */
   siblings?: PlanSibling[];
 };

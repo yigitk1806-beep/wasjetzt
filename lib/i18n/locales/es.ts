@@ -247,6 +247,8 @@ export const es: Dictionary = {
     variantNames: { balanced: 'Equilibrado', romantic: 'Romántico', action: 'Acción', cheap: 'Económico' },
     mockNotice:
       'Datos de demostración: los lugares, precios y horarios de este plan son ejemplos y no pertenecen a ningún negocio real. El tiempo y las distancias sí se calculan de verdad.',
+    staleNotice:
+      'Estos lugares vienen de nuestra caché porque OpenStreetMap no está disponible ahora mismo. Son lugares reales, pero los datos tienen unos días – los horarios pueden haber cambiado. Ante la duda, llama antes.',
     weatherChanged: 'El tiempo ha cambiado.',
     weatherChangedHint: 'La parte prevista al aire libre podría mojarse.',
     adjust: 'Ajustar plan',

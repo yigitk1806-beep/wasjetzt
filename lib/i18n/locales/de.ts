@@ -265,6 +265,8 @@ export const de = {
     variantNames: { balanced: 'Ausgewogen', romantic: 'Romantisch', action: 'Action', cheap: 'Günstig' },
     mockNotice:
       'Demo-Daten: Orte, Preise und Öffnungszeiten in diesem Plan sind Beispiele und gehören zu keinem echten Betrieb. Wetter und Entfernungen sind echt berechnet.',
+    staleNotice:
+      'Diese Orte stammen aus unserem Zwischenspeicher, weil OpenStreetMap gerade nicht erreichbar ist. Es sind echte Orte, ihr Stand ist aber ein paar Tage alt – Öffnungszeiten können sich geändert haben. Ruf im Zweifel kurz an.',
     weatherChanged: 'Das Wetter hat sich geändert.',
     weatherChangedHint: 'Der geplante Outdoor-Teil könnte nass werden.',
     adjust: 'Plan anpassen',

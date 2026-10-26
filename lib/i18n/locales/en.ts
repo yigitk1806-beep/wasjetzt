@@ -247,6 +247,8 @@ export const en: Dictionary = {
     variantNames: { balanced: 'Balanced', romantic: 'Romantic', action: 'Action', cheap: 'Budget' },
     mockNotice:
       'Demo data: places, prices and opening hours in this plan are examples and do not belong to any real business. Weather and distances are calculated for real.',
+    staleNotice:
+      'These places come from our cache because OpenStreetMap is currently unreachable. They are real places, but the data is a few days old – opening hours may have changed. When in doubt, call ahead.',
     weatherChanged: 'The weather has changed.',
     weatherChangedHint: 'The planned outdoor part could get wet.',
     adjust: 'Adjust plan',

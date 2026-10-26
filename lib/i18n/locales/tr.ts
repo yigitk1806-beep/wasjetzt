@@ -247,6 +247,8 @@ export const tr: Dictionary = {
     variantNames: { balanced: 'Dengeli', romantic: 'Romantik', action: 'Aksiyon', cheap: 'Uygun fiyatlı' },
     mockNotice:
       'Demo verisi: Bu plandaki yerler, fiyatlar ve açılış saatleri örnektir ve gerçek bir işletmeye ait değildir. Hava durumu ve mesafeler gerçekten hesaplanır.',
+    staleNotice:
+      'Bu yerler önbelleğimizden geliyor, çünkü OpenStreetMap şu anda erişilemiyor. Gerçek yerler, ancak veriler birkaç günlük – açılış saatleri değişmiş olabilir. Emin değilsen önce ara.',
     weatherChanged: 'Hava değişti.',
     weatherChangedHint: 'Planlanan açık hava kısmı ıslanabilir.',
     adjust: 'Planı uyarla',

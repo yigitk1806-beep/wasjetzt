@@ -67,6 +67,26 @@ Geprüft werden Stimmung „Action", Kachel „Gaming", fünf Freitextvarianten,
 Familien mit Kind, „Station ersetzen", Alternativpläne, Touren, die Diagnose
 und die erzeugte Overpass-Abfrage.
 
+### Notfallspeicher bei Ausfall
+
+Sichert zu, dass die App bei nicht erreichbarem OpenStreetMap alte **echte**
+Orte ausliefert statt gar nichts — gekennzeichnet, und ohne dass die
+Glücksspielsperre aufweicht.
+
+Braucht eine kurze Haltbarkeit, damit eine Kachel in Sekunden altert statt in
+24 Stunden:
+
+```bash
+node infra/tests/overpass-stub.mjs
+
+OVERPASS_PRIMARY_URL=http://localhost:3999/api/interpreter OVERPASS_FALLBACK_URL=http://localhost:3999/api/interpreter WASJETZT_DEMO_ORTE=0 WASJETZT_CACHE_TTL_MS=4000 npx next dev --port 3124
+
+node infra/tests/notfallspeicher.mjs
+```
+
+Ohne `WASJETZT_CACHE_TTL_MS` meldet sich der Test als nicht messbar, statt
+stillschweigend durchzugehen.
+
 ### Touren mit echten Daten
 
 ```bash

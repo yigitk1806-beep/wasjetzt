@@ -90,12 +90,42 @@ const CACHE_VERSION = 'v11';
 const ZELLE_NAH = 0.005;
 const ZELLE_WEIT = 0.02;
 /**
+ * Eine Frist in Millisekunden, umstellbar ueber die Umgebung.
+ *
+ * Der Standard gilt im Betrieb; die Variable gibt es, damit ein Test eine
+ * Kachel altern lassen kann, ohne einen Tag zu warten - und damit sich die
+ * Haltbarkeit im Betrieb notfalls ohne Neubau aendern laesst. Unsinnige
+ * Werte werden ignoriert statt uebernommen.
+ */
+function frist(name: string, standard: number): number {
+  const roh = Number(process.env[name]);
+  return Number.isFinite(roh) && roh > 0 ? roh : standard;
+}
+
+/**
  * Wie lange eine geladene Kachel gilt. Großzügig, weil sich die Orte einer
  * Gegend kaum ändern – und weil Öffnungszeiten ohnehin erst beim Planen gegen
  * die aktuelle Uhrzeit geprüft werden, nicht beim Laden. Mit einer kurzen
  * Frist würde praktisch jeder erste Besucher des Tages auf Overpass warten.
  */
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const CACHE_TTL_MS = frist('WASJETZT_CACHE_TTL_MS', 24 * 60 * 60 * 1000);
+
+/**
+ * Wie alt eine Kachel im Notfall sein darf.
+ *
+ * Antwortet OpenStreetMap gar nicht, ist die Wahl nicht "frische Daten oder
+ * alte Daten", sondern "alte Daten oder kein Plan". Ein Restaurant, das vor
+ * drei Wochen an dieser Ecke stand, steht mit sehr hoher Wahrscheinlichkeit
+ * immer noch dort - und falls nicht, ist ein Vorschlag, der danebenliegt,
+ * immer noch besser als eine Fehlermeldung.
+ *
+ * Die Orte sind dabei echt, nur womoeglich veraltet. Sie werden mit `stale`
+ * gekennzeichnet, und der Plan sagt es dem Nutzer. Erfunden wird nichts.
+ *
+ * Der Wert muss zum Aufraeumen in `prismaPlaceCache.ts` passen: Was dort
+ * geloescht wird, kann hier nicht mehr helfen.
+ */
+const NOTFALL_TTL_MS = frist('WASJETZT_NOTFALL_TTL_MS', 30 * 24 * 60 * 60 * 1000);
 
 /** Erster Endpunkt bekommt mehr Zeit; die Ersatzinstanzen sollen nicht bremsen. */
 
@@ -315,10 +345,16 @@ export class OverpassPlaceProvider implements PlaceProvider {
     const cell = `${CACHE_VERSION}:${Math.round(radius)}:${cellLat.toFixed(3)}:${cellLon.toFixed(3)}`;
     const key = theme === 'sights' ? `sights:${cell}` : cell;
 
-    // Kürzlich gescheitert? Dann nicht erneut minutenlang warten.
+    // Kürzlich gescheitert? Dann nicht erneut minutenlang warten - aber auch
+    // nicht einfach aufgeben: Waehrend eines Ausfalls laeuft fast jede
+    // Anfrage hier vorbei, und ohne diesen Umweg bliebe der Notfallspeicher
+    // ungenutzt. Genau der Fall, fuer den er gedacht ist.
     const letzterFehler = this.gescheitert.get(key);
     if (letzterFehler !== undefined && Date.now() - letzterFehler < FEHLER_PAUSE_MS) {
-      return Promise.reject(new OverpassUnavailableError(`${key}: kürzlich gescheitert`));
+      return this.notfallAusSpeicher(key).then((alt) => {
+        if (alt) return alt;
+        throw new OverpassUnavailableError(`${key}: kürzlich gescheitert`);
+      });
     }
 
     // Parallele Anfragen auf dieselbe Zelle teilen sich einen Vorgang.
@@ -345,6 +381,27 @@ export class OverpassPlaceProvider implements PlaceProvider {
     return request;
   }
 
+  /**
+   * Letzter Ausweg, wenn OpenStreetMap nicht antwortet: eine abgelaufene
+   * Kachel aus dem Zwischenspeicher.
+   *
+   * Die Wahl ist hier nicht "frisch oder alt", sondern "alt oder kein Plan".
+   * Die Orte sind echt - sie werden nur mit `stale` gekennzeichnet, damit
+   * der Plan es dem Nutzer sagen kann. Erfunden wird nichts: Gibt der
+   * Speicher nichts her, bleibt es beim Fehler.
+   *
+   * Die harten Filter laufen danach unveraendert ueber diese Orte, also
+   * greifen Jugendschutz und Gluecksspielsperre genauso wie bei frischen
+   * Daten - `gambling` steht im gespeicherten Ort drin, und der Schluessel
+   * traegt die CACHE_VERSION, unter der er geschrieben wurde.
+   */
+  private async notfallAusSpeicher(key: string): Promise<Place[] | null> {
+    const alt = await this.cache.get(key, NOTFALL_TTL_MS, { uebernehmen: false });
+    if (!alt?.length) return null;
+    console.warn(`[overpass] ${key}: nicht erreichbar, nutze Zwischenspeicher`);
+    return alt.map((place) => ({ ...place, stale: true }));
+  }
+
   private async loadCell(
     key: string,
     lat: number,
@@ -355,9 +412,15 @@ export class OverpassPlaceProvider implements PlaceProvider {
     const cached = await this.cache.get(key, CACHE_TTL_MS);
     if (cached) return cached;
 
-    const places = await this.fetchCell(lat, lon, theme, radius);
-    await this.cache.set(key, places);
-    return places;
+    try {
+      const places = await this.fetchCell(lat, lon, theme, radius);
+      await this.cache.set(key, places);
+      return places;
+    } catch (fehler) {
+      const alt = await this.notfallAusSpeicher(key);
+      if (alt) return alt;
+      throw fehler;
+    }
   }
 
   private async fetchCell(
