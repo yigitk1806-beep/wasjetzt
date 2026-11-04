@@ -1,3 +1,4 @@
+import { WASJETZT_USER_AGENT } from '@/lib/kennung';
 import { haversineMeters } from '@/lib/geo';
 import type { GeocodeResult, GeocodingProvider } from '@/providers/types';
 import type { Coordinates } from '@/types/domain';
@@ -97,7 +98,7 @@ export class PhotonGeocodingProvider implements GeocodingProvider {
 async function hole<T>(url: URL): Promise<T> {
   const res = await fetch(url, {
     signal: AbortSignal.timeout(4000),
-    headers: { 'User-Agent': 'WasJetzt/1.0 (https://wasjetzt-three.vercel.app)' },
+    headers: { 'User-Agent': WASJETZT_USER_AGENT },
   });
   if (!res.ok) throw new Error(`photon ${res.status}`);
   return (await res.json()) as T;

@@ -1,3 +1,4 @@
+import { WASJETZT_USER_AGENT } from '@/lib/kennung';
 import type { RouteQuery, RoutingProvider } from '@/providers/types';
 import type { Mobility, TravelLeg } from '@/types/domain';
 
@@ -128,7 +129,7 @@ export class OsrmRoutingProvider implements RoutingProvider {
       if (versuch > 0) await new Promise((r) => setTimeout(r, 300));
       try {
         const res = await fetch(url, {
-          headers: { 'User-Agent': 'WasJetzt/0.1 (Freizeitplaner)' },
+          headers: { 'User-Agent': WASJETZT_USER_AGENT },
           signal: AbortSignal.timeout(timeout),
         });
         if (!res.ok) throw new Error(`OSRM ${res.status}`);
@@ -188,7 +189,7 @@ export class OsrmRoutingProvider implements RoutingProvider {
         (weg.overview ? '?overview=full&geometries=polyline' : '?overview=false');
       try {
         const res = await fetch(url, {
-          headers: { 'User-Agent': 'WasJetzt/0.1 (Freizeitplaner)' },
+          headers: { 'User-Agent': WASJETZT_USER_AGENT },
           signal: AbortSignal.timeout(8000),
         });
         const text = await res.text();

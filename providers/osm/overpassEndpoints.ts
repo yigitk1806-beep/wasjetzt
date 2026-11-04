@@ -1,3 +1,4 @@
+import { WASJETZT_USER_AGENT } from '@/lib/kennung';
 /**
  * Welche Overpass-Instanzen in welcher Reihenfolge gefragt werden.
  *
@@ -144,7 +145,7 @@ export async function probeOverpass(timeoutMs = 12_000): Promise<OverpassZustand
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': 'WasJetzt/0.1 (Freizeitplaner; +https://wasjetzt.app)',
+            'User-Agent': WASJETZT_USER_AGENT,
           },
           body: `data=${encodeURIComponent(frage)}`,
           signal: AbortSignal.timeout(timeoutMs),
