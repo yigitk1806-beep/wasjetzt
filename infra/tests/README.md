@@ -98,6 +98,38 @@ Ergänzt den deterministischen Teil um eine Tour aus echten Ortsdaten.
 **Braucht Overpass und OSRM.** Fällt eine der Quellen aus, meldet der Test
 „nicht messbar" statt zu bestehen.
 
+## Eigene Ortsdatenbank
+
+```bash
+node --experimental-strip-types infra/osm-import/holen.mts europe/germany/berlin
+node --import ./infra/aliasHaken.mjs --experimental-strip-types infra/tests/ortsdaten.mts
+```
+
+Braucht den Berlin-Auszug unter `.osm/` (95 MB, nicht im Repository). Ohne
+Datei meldet sich der Test mit der Anleitung und Exit-Code 1.
+
+Geprüft wird an **nachprüfbaren Tatsachen**, nicht an Zahlen aus dem Test
+selbst. Ein Test, der nur bestätigt, dass der Leser dasselbe liest wie beim
+letzten Lauf, sagt nichts darüber, ob er richtig liest.
+
+| Prüfung | Woran sie hängt |
+| --- | --- |
+| Jeder von einem Weg genannte Knoten wurde gefunden | Vollständigkeit der Protobuf-Dekodierung |
+| Alle Koordinaten liegen im Berliner Kasten | Differenz- und Versatzrechnung der Koordinaten |
+| Sechs Wahrzeichen vorhanden, zwei davon metergenau | Dass wirklich die richtigen Orte herauskommen |
+| Kein Glücksspielort kommt unmarkiert durch | Dass die Sperre auch auf dieser Quelle greift |
+| Orte, die nur Sehenswürdigkeit sind, bleiben erhalten | Dass der Import nicht nur `classify` fragt |
+
+Der metergenaue Teil ist der aussagekräftigste: Der Berliner Fernsehturm
+liegt 3 m, der Berliner Dom 13 m von seiner bekannten Stelle. Ein Ort mit
+dem richtigen Namen an falschen Koordinaten wäre der schlimmere Fehler als
+ein fehlender — der Nutzer liefe hin.
+
+Eine Prüfung meldet sich planmäßig als **nicht messbar**: Im Berliner
+Auszug gibt es keinen Ort mit `gambling=no`, also lässt sich dort nicht
+zeigen, dass so ein Ort nicht gesperrt wird. Dieser Fall ist im
+deterministischen Test oben abgedeckt, Fixture „Ehrliche Kneipe".
+
 ## Externe Daten: Routenlinien
 
 ```bash
