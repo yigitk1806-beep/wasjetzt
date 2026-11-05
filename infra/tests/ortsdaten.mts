@@ -28,6 +28,7 @@ import { leseKnoten, leseWege, leseKoordinaten } from '../osm-import/pbfLeser.mt
 import { classify, istGluecksspiel } from '../../providers/osm/taxonomy.ts';
 import { classifySight } from '../../providers/osm/sights.ts';
 import { toPlace, toSight } from '../../providers/osm/osmToPlace.ts';
+import { alsElement, ausPlaceId, umkreisKasten } from '../../db/postgresPlaceProvider.ts';
 
 const PFAD = process.env.AUSZUG ?? '.osm/europe-germany-berlin-latest.osm.pbf';
 
@@ -268,6 +269,69 @@ const alsSicht = nurSicht
   .filter((p) => p !== null);
 chk('Sie kommen auch durch toSight', alsSicht.length > 100,
   `${alsSicht.length} von ${nurSicht.length}`);
+
+console.log('');
+console.log('### 7 · Die Kennung uebersteht den Weg in die Datenbank und zurueck');
+
+// Gespeichert ist `node/123`, im Plan steht `osm_n123`. Beide Richtungen
+// muessen zusammenpassen, sonst findet "Station ersetzen" still nichts:
+// `getById` gibt null zurueck, und der Nutzer sieht keinen Fehler, sondern
+// nur ein Angebot weniger. Genau die Sorte Fehler, die ohne Test durchgeht.
+{
+  const stichprobe = [...knotenOrte.slice(0, 300), ...wegOrte.slice(0, 300)];
+  const gebrochen: string[] = [];
+
+  for (const roh of stichprobe) {
+    const element = alsElement({ id: roh.id, lat: roh.lat, lon: roh.lon, tags: roh.tags });
+    const ort = toPlace(element) ?? toSight(element);
+    if (!ort) continue;
+    const zurueck = ausPlaceId(ort.id);
+    if (zurueck !== roh.id) gebrochen.push(roh.id + ' -> ' + ort.id + ' -> ' + zurueck);
+  }
+
+  chk('Kennung laeuft verlustfrei hin und zurueck', gebrochen.length === 0,
+    gebrochen.length
+      ? gebrochen.length + ' gebrochen, z. B. ' + gebrochen[0]
+      : stichprobe.length + ' Kennungen geprueft');
+
+  // Und was nicht von hier kommt, wird nicht geraten.
+  const fremd = ['', 'osm_x5', 'node/5', 'osm_n', 'osm_nabc', 'mock_1'];
+  const geraten = fremd.filter((x) => ausPlaceId(x) !== null);
+  chk('Fremde Kennungen werden abgewiesen, nicht geraten', geraten.length === 0,
+    geraten.length ? 'angenommen: ' + geraten.join(', ') : fremd.length + ' Formen geprueft');
+}
+
+console.log('');
+console.log('### 8 · Der Suchkasten umschliesst den Umkreis wirklich');
+
+// Der Kasten ist die Vorauswahl fuer die Datenbank. Ist er zu klein, fehlen
+// Orte am Rand - und niemand merkt es, weil ein Plan ja zustande kommt, nur
+// mit weniger Auswahl.
+{
+  const mitte = { lat: 52.5376, lon: 13.3865 };
+  const zuKlein: string[] = [];
+  const bogen = Math.PI / 180;
+
+  for (const radius of [500, 1100, 5000, 25_000]) {
+    const kasten = umkreisKasten(mitte, radius);
+    const latGrad = radius / 111_320;
+    const lonGrad = radius / (111_320 * Math.cos(mitte.lat * bogen));
+    const raender = [
+      { lat: mitte.lat + latGrad, lon: mitte.lon },
+      { lat: mitte.lat - latGrad, lon: mitte.lon },
+      { lat: mitte.lat, lon: mitte.lon + lonGrad },
+      { lat: mitte.lat, lon: mitte.lon - lonGrad },
+    ];
+    for (const r of raender) {
+      const drinnen =
+        r.lat >= kasten.latMin && r.lat <= kasten.latMax &&
+        r.lon >= kasten.lonMin && r.lon <= kasten.lonMax;
+      if (!drinnen) zuKlein.push(radius + ' m: ' + r.lat.toFixed(4) + ',' + r.lon.toFixed(4));
+    }
+  }
+  chk('Kasten umschliesst den Umkreis in allen Himmelsrichtungen', zuKlein.length === 0,
+    zuKlein.length ? 'zu klein bei ' + zuKlein[0] : 'vier Radien x vier Richtungen');
+}
 
 console.log(`\n==== ${ok} PASS / ${fail} FAIL${infra ? ` / ${infra} nicht messbar` : ''} ====`);
 schlecht.forEach((x) => console.log('  ! ' + x));

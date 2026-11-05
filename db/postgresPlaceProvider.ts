@@ -153,7 +153,7 @@ async function gebietAbgedeckt(center: Coordinates): Promise<boolean> {
   return zahl > 0;
 }
 
-type Reihe = { id: string; lat: number; lon: number; tags: unknown };
+export type Reihe = { id: string; lat: number; lon: number; tags: unknown };
 
 /**
  * Eine Datenbankzeile in die Form, die `toPlace` erwartet.
@@ -161,7 +161,7 @@ type Reihe = { id: string; lat: number; lon: number; tags: unknown };
  * Bewusst dieselbe Form wie eine Overpass-Antwort: So braucht die
  * Umwandlung keinen zweiten Pfad, den man vergessen könnte zu pflegen.
  */
-function alsElement(reihe: Reihe): OverpassElement {
+export function alsElement(reihe: Reihe): OverpassElement {
   const [art, kennung] = reihe.id.split('/');
   return {
     type: art === 'way' ? 'way' : art === 'relation' ? 'relation' : 'node',
@@ -173,7 +173,7 @@ function alsElement(reihe: Reihe): OverpassElement {
 }
 
 /** `osm_n123` → `node/123`. Umkehrung der Kennung aus `toPlace`. */
-function ausPlaceId(id: string): string | null {
+export function ausPlaceId(id: string): string | null {
   const treffer = /^osm_([nwr])(\d+)$/.exec(id);
   if (!treffer) return null;
   const art = { n: 'node', w: 'way', r: 'relation' }[treffer[1]];
@@ -186,7 +186,7 @@ function ausPlaceId(id: string): string | null {
  * Die genaue Entfernung prüft danach `meter` – das Rechteck ist nur dafür
  * da, die Datenbank nicht den ganzen Bestand lesen zu lassen.
  */
-function umkreisKasten(center: Coordinates, radiusMeters: number) {
+export function umkreisKasten(center: Coordinates, radiusMeters: number) {
   const latGrad = radiusMeters / 111_320;
   const lonGrad = radiusMeters / (111_320 * Math.max(0.2, Math.cos((center.lat * Math.PI) / 180)));
   return {
