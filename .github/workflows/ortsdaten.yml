@@ -1,0 +1,156 @@
+#
+# Ortsdaten aus OpenStreetMap importieren und aktuell halten.
+#
+# Warum das hier läuft und nicht auf einem Rechner:
+#
+#   Die Ortsdaten müssen regelmäßig neu herein, sonst steht in einem Jahr
+#   ein Bestand von heute in der Datenbank. Ein Lauf, der von Hand gestartet
+#   werden muss, wird irgendwann nicht gestartet. Dieses Repository ist
+#   öffentlich, GitHub-Actions-Minuten sind damit unbegrenzt - ein monatlicher
+#   Lauf kostet nichts.
+#
+# Was der Lauf anfasst:
+#
+#   Ausschließlich die Tabellen `OsmPlace` und `OsmImport`. Pläne und
+#   Ortscache bleiben unberührt. `prisma db push` läuft ohne
+#   `--accept-data-loss`: Würde die Änderung Daten verlieren, bricht sie ab,
+#   statt sie zu verwerfen.
+#
+#   Der neue Bestand kommt zuerst vollständig herein, der alte desselben
+#   Gebiets geht erst danach. Die App steht zwischendurch also nie ohne
+#   Daten da.
+#
+# VORAUSSETZUNG: das Geheimnis `DATABASE_URL` in den Repository-Einstellungen
+# (Settings → Secrets and variables → Actions → New repository secret).
+# Ohne das tut dieser Lauf nichts und sagt, was fehlt. Das ist Absicht - ein
+# Zugang zur Produktionsdatenbank gehört nicht in eine Datei im Repository.
+#
+name: Ortsdaten
+
+on:
+  # Am dritten jeden Monats. Geofabrik erneuert die Auszüge täglich;
+  # monatlich reicht für Öffnungszeiten und neue Lokale, und es hält die
+  # Last auf der gespendeten Infrastruktur klein.
+  schedule:
+    - cron: '0 4 3 * *'
+  # Und jederzeit von Hand, etwa um ein Gebiet neu hinzuzunehmen.
+  workflow_dispatch:
+    inputs:
+      gebiete:
+        description: 'Gebiete, mit Komma getrennt (Namen wie bei geofabrik.de)'
+        required: false
+        default: 'europe/germany/berlin'
+      trocken:
+        description: 'Nur rechnen, nichts schreiben'
+        type: boolean
+        required: false
+        default: false
+
+# Zwei Läufe gleichzeitig würden sich beim Aufräumen alter Bestände in die
+# Quere kommen.
+concurrency:
+  group: ortsdaten
+  cancel-in-progress: false
+
+jobs:
+  importieren:
+    runs-on: ubuntu-latest
+    # Ein Auszug kann groß sein, und der Import läuft in drei Durchgängen
+    # über die Datei.
+    timeout-minutes: 60
+
+    steps:
+      - name: Quellcode holen
+        uses: actions/checkout@v4
+
+      - name: Node einrichten
+        uses: actions/setup-node@v4
+        with:
+          # 24, weil die Importskripte die TypeScript-Dateien der App direkt
+          # laden und nur die Typen entfernen. Siehe infra/osm-import/README.md.
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Zugang prüfen
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ "${{ inputs.trocken }}" = "true" ]; then
+            echo "Trockenlauf - kein Zugang nötig."
+            exit 0
+          fi
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error title=DATABASE_URL fehlt::Das Geheimnis DATABASE_URL ist nicht gesetzt."
+            echo ""
+            echo "Settings → Secrets and variables → Actions → New repository secret"
+            echo "Name: DATABASE_URL"
+            echo "Wert: dieselbe Verbindung, die in Vercel steht."
+            echo ""
+            echo "Es wurde nichts geändert."
+            exit 1
+          fi
+          echo "Zugang ist gesetzt."
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Tabellen anlegen oder angleichen
+        if: ${{ inputs.trocken != true }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        # Ohne --accept-data-loss: Eine Änderung, die Daten verlieren würde,
+        # bricht hier ab, statt sie stillschweigend zu verwerfen.
+        run: npx prisma db push --skip-generate
+
+      - name: Auszüge holen und importieren
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GEBIETE: ${{ inputs.gebiete || 'europe/germany/berlin' }}
+          TROCKEN: ${{ inputs.trocken }}
+        run: |
+          set -o pipefail
+          IFS=',' read -ra liste <<< "$GEBIETE"
+
+          for roh in "${liste[@]}"; do
+            gebiet="$(echo "$roh" | xargs)"
+            [ -z "$gebiet" ] && continue
+
+            echo "::group::$gebiet"
+            node --experimental-strip-types infra/osm-import/holen.mts "$gebiet"
+
+            datei=".osm/$(echo "$gebiet" | tr '/' '-')-latest.osm.pbf"
+            if [ ! -f "$datei" ]; then
+              echo "::error title=Auszug fehlt::$datei wurde nicht angelegt."
+              exit 1
+            fi
+
+            if [ "$TROCKEN" = "true" ]; then
+              node --import ./infra/aliasHaken.mjs --experimental-strip-types \
+                infra/osm-import/importieren.mts "$datei" "$gebiet" --trocken
+            else
+              node --import ./infra/aliasHaken.mjs --experimental-strip-types \
+                infra/osm-import/importieren.mts "$datei" "$gebiet"
+            fi
+
+            # Der Auszug wird nicht mehr gebraucht. Mehrere Gebiete
+            # hintereinander würden sonst die Platte des Läufers füllen.
+            rm -f "$datei"
+            echo "::endgroup::"
+          done
+
+      - name: Stand nachsehen
+        if: ${{ inputs.trocken != true }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        # Nicht die Rueckmeldung des Imports, sondern ein eigener Blick in die
+        # Datenbank. Nur so ist belegt, dass wirklich etwas angekommen ist.
+        run: |
+          set -o pipefail
+          node --import ./infra/aliasHaken.mjs --experimental-strip-types             infra/osm-import/stand.mts | tee zusammenfassung.txt
+          {
+            echo '### Ortsdaten aktualisiert'
+            echo ''
+            echo '```'
+            cat zusammenfassung.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
