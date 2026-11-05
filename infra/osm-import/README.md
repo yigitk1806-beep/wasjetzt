@@ -26,20 +26,33 @@ Import in derselben Datenbank, in der die Pläne schon liegen.
 
 ## Was es kostet
 
-Für Berlin gemessen, nicht geschätzt (Auszug vom 03.11.2026):
+Gemessen, nicht geschätzt — Auszüge vom 03./04.11.2026:
 
-```
-7.915.427 Knoten, 1.340.096 Wege im Auszug (95,3 MB)
-   18.130 brauchbare Orte mit Namen
-      609 davon ausschließlich Sehenswürdigkeit (Kirchen, Brücken, Denkmäler)
-      105 als Glücksspiel markiert — gespeichert und gesperrt, nicht entfernt
-   ~8,4 MB in der Datenbank
-     17 s Laufzeit
-```
+| Gebiet | Auszug | Orte | in der Datenbank | Laufzeit |
+| --- | --- | --- | --- | --- |
+| `europe/germany/berlin` | 95 MB | 18.130 | ~8,4 MB | 17 s |
+| `europe/germany/brandenburg` | 283 MB | 30.367 | ~13,3 MB | 34 s |
+| `europe/germany/hamburg` | 52 MB | 7.856 | ~3,4 MB | 6 s |
+| `europe/germany/bremen` | 20 MB | — | — | — |
 
-Neon Free erlaubt 1 GB. Berlin passt also etwa hundertfach hinein; ganz
-Deutschland wäre nach dieser Messung in der Größenordnung von 400 MB und
-damit auch noch drin.
+Berlin und Brandenburg zusammen: **48.497 Orte, rund 22 MB.** Neon Free
+erlaubt 1 GB — das ist ein Fünfzigstel davon.
+
+Der Anteil der brauchbaren Orte ist klein, und das ist richtig so: Von
+Berlins 7,9 Millionen Knoten sind 18.130 ein Ort, an den man abends gehen
+kann. Der Rest ist Straßenverlauf, Hausumriss, Laternenmast.
+
+### Grenze des Lesers
+
+Geprüft bis 283 MB (Brandenburg). Der Leser hält den Auszug vollständig im
+Arbeitsspeicher und liest ihn in drei Durchgängen — für Städte und
+Bundesländer unproblematisch.
+
+Der Auszug für ganz Deutschland ist **4,65 GB**. Das wäre nicht an einer
+festen Grenze gescheitert, sondern am Arbeitsspeicher: etwa 5 GB nur für
+die Datei. Auf einem GitHub-Läufer mit 16 GB vermutlich machbar,
+**ungetestet.** Wer das braucht, misst es vorher mit `--trocken` — oder
+schreibt den Leser auf einen Datenstrom um, statt es zu hoffen.
 
 ## Benutzung
 

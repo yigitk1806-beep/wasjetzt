@@ -39,7 +39,10 @@ on:
       gebiete:
         description: 'Gebiete, mit Komma getrennt (Namen wie bei geofabrik.de)'
         required: false
-        default: 'europe/germany/berlin'
+        # Berlin und Brandenburg zusammen, weil ein Plan mit 25 km Radius
+        # ueber die Stadtgrenze reicht. Nur Berlin zu importieren hiesse,
+        # dass die aeusseren Radiusstufen ins Leere greifen.
+        default: 'europe/germany/berlin,europe/germany/brandenburg'
       trocken:
         description: 'Nur rechnen, nichts schreiben'
         type: boolean
@@ -105,7 +108,7 @@ jobs:
       - name: Auszüge holen und importieren
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          GEBIETE: ${{ inputs.gebiete || 'europe/germany/berlin' }}
+          GEBIETE: ${{ inputs.gebiete || 'europe/germany/berlin,europe/germany/brandenburg' }}
           TROCKEN: ${{ inputs.trocken }}
         run: |
           set -o pipefail
