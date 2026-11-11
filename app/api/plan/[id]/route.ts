@@ -16,11 +16,10 @@ export async function GET(
   return NextResponse.json({ plan });
 }
 
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
-  const ok = await getPlanStore().delete(id);
-  return NextResponse.json({ ok }, { status: ok ? 200 : 404 });
-}
+// Hier stand bis zum 11.11.2026 ein DELETE ohne jede Prüfung. Die
+// Plankennung steht aber in jedem geteilten Link – wer einen Plan geschickt
+// bekam, konnte ihn mit einem einzigen Aufruf für die ganze Gruppe löschen.
+// Die App selbst hat den Endpunkt nie benutzt; die Gesundheitsprüfung
+// räumt ihren Testplan direkt über den Speicher ab. Ohne Konten gibt es
+// niemanden, dem Löschen zustünde – Pläne verfallen nach sieben Tagen von
+// selbst. Kommt einmal ein Löschknopf, braucht er einen Besitznachweis.
