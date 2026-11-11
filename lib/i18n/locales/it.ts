@@ -428,6 +428,7 @@ export const it: Dictionary = {
   },
 
   errors: {
+    'rate-limited': 'Troppe richieste in poco tempo. Attendi un momento e riprova.',
     'live-data-unavailable':
       'Non è stato possibile caricare i dati in tempo reale. Riprova tra un istante.',
     'no-plan': 'Al momento non trovo niente di adatto.',

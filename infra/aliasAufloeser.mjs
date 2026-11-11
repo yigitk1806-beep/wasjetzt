@@ -37,7 +37,7 @@ function ersterTreffer(roh) {
   return null;
 }
 
-export function resolve(angabe, kontext, naechster) {
+export async function resolve(angabe, kontext, naechster) {
   let roh = null;
 
   if (angabe.startsWith('@/')) {
@@ -48,7 +48,22 @@ export function resolve(angabe, kontext, naechster) {
     roh = aufloesen(dirname(fileURLToPath(kontext.parentURL)), angabe);
   }
 
-  if (roh === null) return naechster(angabe, kontext);
+  if (roh === null) {
+    // Paket-Unterpfade wie `next/server`: Ein Bundler hängt `.js` an, Node
+    // nur, wenn das Paket eine `exports`-Tabelle hat. Next.js hat für diese
+    // Pfade keine. Also einmal mit `.js` nachfragen, bevor es scheitert.
+    if (/^[a-z@][^:]*\/[^.]+$/i.test(angabe) && !angabe.startsWith('node:')) {
+      try {
+        // await: Im Lade-Thread liefert naechster ein Versprechen, und ein
+        // Fehlschlag kommt als Ablehnung, nicht als geworfener Fehler.
+        return await naechster(angabe, kontext);
+      } catch (fehler) {
+        if (fehler?.code !== 'ERR_MODULE_NOT_FOUND') throw fehler;
+        return naechster(`${angabe}.js`, kontext);
+      }
+    }
+    return naechster(angabe, kontext);
+  }
 
   const treffer = ersterTreffer(roh);
   if (treffer) return { url: pathToFileURL(treffer).href, shortCircuit: true };

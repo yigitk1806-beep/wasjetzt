@@ -428,6 +428,7 @@ export const tr: Dictionary = {
   },
 
   errors: {
+    'rate-limited': 'Kısa sürede çok fazla istek geldi. Biraz bekle ve tekrar dene.',
     'live-data-unavailable': 'Canlı veriler şu an yüklenemedi. Biraz sonra tekrar dene.',
     'no-plan': 'Şu an buna uygun bir şey bulamıyorum.',
     'no-food-open': 'Şu an burada yemek için açık bir yer yok. Daha sonra dene ya da çapı büyüt.',

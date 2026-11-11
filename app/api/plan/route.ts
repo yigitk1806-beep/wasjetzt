@@ -23,6 +23,7 @@ import {
   processOffsetMin,
 } from '@/lib/time';
 import type { Mood, Plan } from '@/types/domain';
+import { bremse, REGELN } from '@/lib/ratenbremse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -56,6 +57,9 @@ type PipelineResult =
  * eine einzelne JSON-Antwort.
  */
 export async function POST(request: Request) {
+  const gebremst = bremse(request, 'planen', REGELN.planen);
+  if (gebremst) return gebremst;
+
   let body: unknown;
   try {
     body = await request.json();

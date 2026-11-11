@@ -428,6 +428,7 @@ export const fr: Dictionary = {
   },
 
   errors: {
+    'rate-limited': 'Trop de demandes en peu de temps. Patientez un instant et réessayez.',
     'live-data-unavailable':
       'Les données en direct n’ont pas pu être chargées. Réessayez dans un instant.',
     'no-plan': 'Je ne trouve rien de adapté pour le moment.',

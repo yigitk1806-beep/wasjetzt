@@ -449,6 +449,7 @@ export const de = {
 
   /** Fehlercodes der Schnittstelle → Text. */
   errors: {
+    'rate-limited': 'Gerade kamen sehr viele Anfragen von dir. Warte einen Moment und versuch es dann noch einmal.',
     'live-data-unavailable': 'Aktuell konnten keine Live-Daten geladen werden. Versuch es gleich noch einmal.',
     'no-plan': 'Dafür finde ich gerade nichts Passendes.',
     'no-food-open': 'Zum Essen hat hier gerade nichts Passendes offen. Versuch es später oder wähle einen größeren Umkreis.',

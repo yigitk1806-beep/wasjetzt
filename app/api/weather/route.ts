@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getProviders } from '@/providers/registry';
+import { bremse, REGELN } from '@/lib/ratenbremse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** Aktuelles Wetter für den Kopf der Startseite. */
 export async function GET(request: Request) {
+  const gebremst = bremse(request, 'weather', REGELN.nachschlagen);
+  if (gebremst) return gebremst;
+
   const { searchParams } = new URL(request.url);
   const lat = Number(searchParams.get('lat'));
   const lon = Number(searchParams.get('lon'));

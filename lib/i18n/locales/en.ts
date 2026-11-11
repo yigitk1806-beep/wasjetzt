@@ -428,6 +428,7 @@ export const en: Dictionary = {
   },
 
   errors: {
+    'rate-limited': 'Too many requests in a short time. Please wait a moment and try again.',
     'live-data-unavailable': 'Live data could not be loaded right now. Please try again in a moment.',
     'no-plan': "I can't find anything suitable for that right now.",
     'no-food-open': 'Nothing suitable to eat is open here right now. Try later or widen the radius.',

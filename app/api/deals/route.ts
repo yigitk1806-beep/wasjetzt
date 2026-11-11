@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { haversineMeters, searchRadiusMeters } from '@/lib/geo';
 import { getProviders } from '@/providers/registry';
 import { isOpenDuring, processOffsetMin } from '@/lib/time';
+import { bremse, REGELN } from '@/lib/ratenbremse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,6 +13,9 @@ export const dynamic = 'force-dynamic';
  * markiert. Später liefern Partner hier echte freie Kapazitäten.
  */
 export async function GET(request: Request) {
+  const gebremst = bremse(request, 'deals', REGELN.nachschlagen);
+  if (gebremst) return gebremst;
+
   const { searchParams } = new URL(request.url);
   const lat = Number(searchParams.get('lat'));
   const lon = Number(searchParams.get('lon'));

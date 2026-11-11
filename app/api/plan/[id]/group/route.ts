@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getPlanStore } from '@/db/planStore';
 import { shortId } from '@/lib/id';
 import type { Category, Participant, Plan, RsvpStatus } from '@/types/domain';
+import { bremse, REGELN } from '@/lib/ratenbremse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const gebremst = bremse(request, 'group', REGELN.aendern);
+  if (gebremst) return gebremst;
+
   const { id } = await params;
   const store = getPlanStore();
 
