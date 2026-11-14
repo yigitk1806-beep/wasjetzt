@@ -28,7 +28,12 @@ const SPEED_KMH: Record<Mobility, number> = {
 
 /** Fixer Zusatzaufwand pro Weg (Parken, Warten auf Bahn …) in Minuten. */
 const OVERHEAD_MIN: Record<Mobility, number> = {
-  walk: 0,
+  // Zwei Minuten für Eingang finden, Ampeln, Umwege. Vorher 0 – und kurze
+  // Wege waren in Wirklichkeit länger als geschätzt: Ackerstraße → Park am
+  // Nordbahnhof sind 303 m Luftlinie, aber 475 m und 6 min Fußweg (der
+  // Eingang liegt um die Ecke). Geschätzt waren 5. In einem vollen Plan
+  // passte der echte Weg dann nicht mehr und blieb gestrichelt.
+  walk: 2,
   bike: 2,
   transit: 8,
   car: 4,
