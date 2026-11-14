@@ -33,6 +33,13 @@ on:
   # Last auf der gespendeten Infrastruktur klein.
   schedule:
     - cron: '0 4 3 * *'
+  # Per Commit: Wer `infra/osm-import/ausloeser.txt` ändert und pusht,
+  # startet einen Import mit den Standardgebieten. Nötig, weil GitHub den
+  # Knopf "Run workflow" erst anbietet, wenn der Workflow auf main liegt -
+  # und weil es ohne GitHub-CLI sonst keinen Weg gibt, ihn auszulösen.
+  push:
+    branches: [main, feat/eigene-ortsdaten]
+    paths: ['infra/osm-import/ausloeser.txt']
   # Und jederzeit von Hand, etwa um ein Gebiet neu hinzuzunehmen.
   workflow_dispatch:
     inputs:

@@ -1,0 +1,4 @@
+Diese Datei aendern und pushen startet den Ortsdaten-Import
+(.github/workflows/ortsdaten.yml, Gebiete: Berlin und Brandenburg).
+
+Letzter Ausloeser: 14.11.2026, erster Import
