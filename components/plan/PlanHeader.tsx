@@ -40,7 +40,16 @@ export function PlanHeader({ plan, onTimeClick }: Props) {
       ? null
       : weg.routing === 'none'
         ? t.plan.airline(distance(t, weg.meter))
-        : `${t.common.approx} ${distance(t, weg.meter)}`;
+        : weg.routing === 'some'
+          ? `${t.common.approx} ${distance(t, weg.meter)}`
+          // Jeder Weg echt berechnet: Dann ist die Länge kein „ca." mehr.
+          : distance(t, weg.meter);
+
+  // Wird jeder Weg gelaufen – auch bei Bus & Bahn, wenn alles nah ist –,
+  // zeigt das Symbol den Fußweg statt der U-Bahn.
+  const wege = plan.steps.map((s) => s.travelFromPrevious).filter((l) => l.distanceMeters > 0);
+  const unterwegs =
+    wege.length > 0 && wege.every((l) => l.mode === 'walk') ? 'walk' : plan.request.mobility;
 
   // Das Budget war für die Gruppe gemeint – also steht hier auch die Summe
   // für die Gruppe, nicht der Betrag pro Kopf.
@@ -85,7 +94,7 @@ export function PlanHeader({ plan, onTimeClick }: Props) {
       <div className="flex flex-wrap gap-1.5">
         {wegText ? (
           <Fakt>
-            {UNTERWEGS_EMOJI[plan.request.mobility]} {wegText}
+            {UNTERWEGS_EMOJI[unterwegs]} {wegText}
           </Fakt>
         ) : null}
         <Fakt>💶 {preis}</Fakt>
