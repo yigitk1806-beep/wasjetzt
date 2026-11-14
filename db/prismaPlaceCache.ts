@@ -56,12 +56,20 @@ export class PrismaPlaceCache implements PlaceCacheStore {
     }
   }
 
-  /** Alte Kacheln höchstens einmal pro Stunde wegräumen. */
+  /**
+   * Alte Kacheln höchstens einmal pro Stunde wegräumen.
+   *
+   * Die Frist war sieben Tage und ist jetzt dreißig: Fällt OpenStreetMap
+   * aus, greift die App auf abgelaufene Kacheln zurück, statt keinen Plan
+   * zu liefern (`NOTFALL_TTL_MS` in `overpassPlaceProvider.ts`). Was hier
+   * gelöscht wird, kann dort nicht mehr helfen – der Ausfall im Oktober 2026
+   * dauerte allein schon sechs Tage.
+   */
   private async cleanupOccasionally(): Promise<void> {
     if (Date.now() - this.lastCleanup < 60 * 60 * 1000) return;
     this.lastCleanup = Date.now();
     try {
-      const grenze = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const grenze = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       await client().placeCache.deleteMany({ where: { fetchedAt: { lt: grenze } } });
     } catch {
       /* Aufräumen ist Kür, kein Pflichtprogramm. */

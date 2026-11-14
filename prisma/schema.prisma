@@ -54,3 +54,70 @@ model PlaceCache {
 
   @@index([fetchedAt])
 }
+
+/// Eigene Ortsdatenbank aus freien OpenStreetMap-Auszügen (Geofabrik).
+///
+/// Warum es die gibt: Die öffentlichen Overpass-Server sind gespendete
+/// Infrastruktur und tragen die Last nicht. Am 04.11.2026 waren alle drei
+/// seit 15 Tagen ununterbrochen im Zeitlimit – die App konnte in kalten
+/// Gegenden keinen einzigen Plan bauen. Ein Geofabrik-Auszug kostet nichts,
+/// ist täglich neu und liegt danach hier.
+///
+/// Gemessen für Berlin (Auszug vom 03.11.2026): 25.419 brauchbare Orte,
+/// rund 2,9 MB Nutzdaten. Neon Free erlaubt 1 GB.
+model OsmPlace {
+  /// `node/123` oder `way/456` – dieselbe Form, die Overpass liefert.
+  id   String @id
+  lat  Float
+  lon  Float
+  name String
+
+  /// Aktivitätsprofil aus `taxonomy.ts`, falls der Ort als Ausgehort taugt.
+  /// Leer bei Orten, die nur Sehenswürdigkeit sind - etwa eine Kirche oder
+  /// eine Brücke.
+  profil String?
+
+  /// Profil aus `sights.ts`, falls der Ort als Sehenswürdigkeit taugt.
+  /// Mindestens eines von beiden ist gesetzt, sonst wird nicht gespeichert.
+  /// Beides getrennt zu führen ist kein Luxus: `classifySight` nimmt
+  /// `historic=*`-Tags an, die `classify` ablehnt. Nur `profil` zu prüfen
+  /// hätte in Berlin 609 Sehenswürdigkeiten verschluckt, darunter 306
+  /// Kirchen und den Dom.
+  sight String?
+
+  /// Glücksspielort. Liegt als eigene Spalte vor, damit die Sperre schon
+  /// in der Abfrage greift und nicht erst im Anwendungscode – zusätzlich
+  /// zu `passesHardFilters`, nicht an seiner Stelle.
+  gambling Boolean @default(false)
+
+  /// Die rohen OSM-Tags. Absichtlich unverarbeitet: Die Umwandlung in
+  /// einen `Place` macht derselbe Code, der auch die Overpass-Antworten
+  /// verarbeitet. Nur so können die beiden Quellen nicht auseinanderlaufen.
+  tags Json
+
+  /// Aus welchem Auszug der Ort stammt – für die Altersangabe am Ort.
+  importId String
+  import   OsmImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([lat, lon])
+  @@index([profil])
+  @@index([sight])
+  @@index([importId])
+}
+
+/// Ein Importlauf. Macht nachvollziehbar, wie alt die Ortsdaten sind –
+/// der Nutzer soll das sehen können, statt es zu glauben.
+model OsmImport {
+  id         String     @id
+  /// Gebiet, wie Geofabrik es nennt, z. B. "europe/germany/berlin".
+  gebiet     String
+  /// Stand des Auszugs laut Geofabrik, nicht der Zeitpunkt des Imports.
+  datenStand DateTime
+  importiert DateTime   @default(now())
+  /// Prüfsumme des Auszugs – belegt, welche Datei verarbeitet wurde.
+  md5        String
+  orte       Int
+  places     OsmPlace[]
+
+  @@index([gebiet, datenStand])
+}

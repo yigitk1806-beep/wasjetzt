@@ -247,6 +247,8 @@ export const fr: Dictionary = {
     variantNames: { balanced: 'Équilibré', romantic: 'Romantique', action: 'Action', cheap: 'Petit budget' },
     mockNotice:
       'Données de démo : les lieux, prix et horaires de ce plan sont des exemples et n’appartiennent à aucun établissement réel. La météo et les distances sont calculées réellement.',
+    staleNotice:
+      'Ces lieux viennent de notre cache car OpenStreetMap est actuellement injoignable. Ce sont de vrais lieux, mais les données ont quelques jours – les horaires peuvent avoir changé. Dans le doute, appelle avant.',
     weatherChanged: 'La météo a changé.',
     weatherChangedHint: 'La partie prévue en extérieur risque d’être mouillée.',
     adjust: 'Adapter le plan',
@@ -426,6 +428,7 @@ export const fr: Dictionary = {
   },
 
   errors: {
+    'rate-limited': 'Trop de demandes en peu de temps. Patientez un instant et réessayez.',
     'live-data-unavailable':
       'Les données en direct n’ont pas pu être chargées. Réessayez dans un instant.',
     'no-plan': 'Je ne trouve rien de adapté pour le moment.',

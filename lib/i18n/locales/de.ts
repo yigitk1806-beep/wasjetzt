@@ -265,6 +265,8 @@ export const de = {
     variantNames: { balanced: 'Ausgewogen', romantic: 'Romantisch', action: 'Action', cheap: 'Günstig' },
     mockNotice:
       'Demo-Daten: Orte, Preise und Öffnungszeiten in diesem Plan sind Beispiele und gehören zu keinem echten Betrieb. Wetter und Entfernungen sind echt berechnet.',
+    staleNotice:
+      'Diese Orte stammen aus unserem Zwischenspeicher, weil OpenStreetMap gerade nicht erreichbar ist. Es sind echte Orte, ihr Stand ist aber ein paar Tage alt – Öffnungszeiten können sich geändert haben. Ruf im Zweifel kurz an.',
     weatherChanged: 'Das Wetter hat sich geändert.',
     weatherChangedHint: 'Der geplante Outdoor-Teil könnte nass werden.',
     adjust: 'Plan anpassen',
@@ -447,6 +449,7 @@ export const de = {
 
   /** Fehlercodes der Schnittstelle → Text. */
   errors: {
+    'rate-limited': 'Gerade kamen sehr viele Anfragen von dir. Warte einen Moment und versuch es dann noch einmal.',
     'live-data-unavailable': 'Aktuell konnten keine Live-Daten geladen werden. Versuch es gleich noch einmal.',
     'no-plan': 'Dafür finde ich gerade nichts Passendes.',
     'no-food-open': 'Zum Essen hat hier gerade nichts Passendes offen. Versuch es später oder wähle einen größeren Umkreis.',

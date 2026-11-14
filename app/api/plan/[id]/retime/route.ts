@@ -6,6 +6,7 @@ import { getProviders } from '@/providers/registry';
 import { normalizePreferences } from '@/lib/requestSchema';
 import { localClock, parseClock } from '@/lib/time';
 import type { PlanRequest } from '@/types/domain';
+import { bremse, REGELN } from '@/lib/ratenbremse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const gebremst = bremse(request, 'retime', REGELN.aendern);
+  if (gebremst) return gebremst;
+
   const { id } = await params;
   const store = getPlanStore();
   const plan = await store.get(id);

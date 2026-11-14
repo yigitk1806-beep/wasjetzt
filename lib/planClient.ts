@@ -85,6 +85,11 @@ export async function requestPlanStreamed(
       body: JSON.stringify(bodyFor(input, preferences)),
     });
 
+    // Gebremst: Ein zweiter Versuch ohne Strom würde nur erneut gebremst.
+    if (res.status === 429) {
+      const data = await res.json().catch(() => ({}));
+      return { error: data.error ?? 'rate-limited', params: data.params };
+    }
     if (!res.ok || !res.body) return requestPlan(input);
 
     const reader = res.body.getReader();

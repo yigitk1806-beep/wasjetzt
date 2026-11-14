@@ -952,6 +952,9 @@ export function assemblePlan(
     meetingPoint: existing?.meetingPoint,
     participants: existing?.participants ?? [],
     containsMockData: steps.some((s) => s.place.source === 'mock'),
+    // Echte Orte, aber aelterer Stand: Das gehoert dem Nutzer gesagt, nicht
+    // stillschweigend ausgeliefert.
+    containsStaleData: steps.some((s) => s.place.stale === true),
     tzOffsetMin: ctx.tzOffsetMin,
     siblings: existing?.siblings,
   };

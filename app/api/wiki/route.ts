@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { bremse, REGELN } from '@/lib/ratenbremse';
 
 export const runtime = 'nodejs';
 
@@ -46,6 +47,9 @@ const TTL_MS = 24 * 60 * 60 * 1000;
 const SPRACHE = /^[a-z]{2,3}(-[a-z]{2,8})?$/;
 
 export async function GET(request: Request) {
+  const gebremst = bremse(request, 'wiki', REGELN.nachschlagen);
+  if (gebremst) return gebremst;
+
   const params = new URL(request.url).searchParams;
   const t = params.get('t') ?? '';
   const wunsch = params.get('lang') ?? 'de';

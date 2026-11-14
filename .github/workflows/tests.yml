@@ -1,0 +1,79 @@
+#
+# Tests bei jedem Push und Pull Request.
+#
+# Läuft gegen einen eigenen, leeren Postgres-Container, der nach dem Lauf
+# verschwindet. Die Produktionsdatenbank wird nie berührt – es gibt hier
+# kein Geheimnis, und der Datenbanktest verweigert Neon-Adressen.
+#
+# Das Repository ist öffentlich, die Minuten kosten nichts.
+#
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pruefen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: wasjetzt
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/wasjetzt
+      TEST_DATENBANK: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Ratenbremse
+        run: node --import ./infra/aliasHaken.mjs --experimental-strip-types infra/tests/ratenbremse.mts
+
+      # Der Berlin-Auszug wird eine Woche zwischengespeichert, damit nicht
+      # jeder Push 95 MB bei Geofabrik abholt – gespendete Infrastruktur.
+      - name: Woche bestimmen
+        id: woche
+        run: echo "kw=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Berlin-Auszug aus dem Zwischenspeicher
+        id: auszug
+        uses: actions/cache@v4
+        with:
+          path: .osm
+          key: osm-berlin-${{ steps.woche.outputs.kw }}
+
+      - name: Berlin-Auszug holen
+        if: steps.auszug.outputs.cache-hit != 'true'
+        run: node --experimental-strip-types infra/osm-import/holen.mts europe/germany/berlin
+
+      - name: Ortsdaten (Leser und Umwandlung)
+        run: node --import ./infra/aliasHaken.mjs --experimental-strip-types infra/tests/ortsdaten.mts
+
+      - name: Tabellen anlegen
+        run: npx prisma db push --skip-generate
+
+      - name: Ortsdatenbank (Import, Abdeckung, Sortierung)
+        run: node --import ./infra/aliasHaken.mjs --experimental-strip-types infra/tests/ortsdatenbank.mts

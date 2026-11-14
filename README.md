@@ -21,7 +21,7 @@ Das ist die wichtigste Tabelle dieses Projekts, und sie ist auch in der App sich
 
 | Daten | Quelle | Schlüssel nötig | Status |
 |---|---|---|---|
-| Orte (Name, Art, Position) | OpenStreetMap via Overpass | nein | **echt** |
+| Orte (Name, Art, Position) | OpenStreetMap – eigene Datenbank, sonst Overpass | nein | **echt** |
 | Öffnungszeiten | OpenStreetMap `opening_hours` | nein | **echt, wenn vorhanden** |
 | Eintrittspreise | OpenStreetMap `fee` / `charge` | nein | **echt, wenn vorhanden** |
 | Preisniveau € / €€ / €€€ | aus der Art des Ortes abgeleitet | – | **Schätzung, als solche gekennzeichnet** |
@@ -81,11 +81,39 @@ Das ist die wichtigste Tabelle dieses Projekts, und sie ist auch in der App sich
 
 ---
 
+## Woher die Orte kommen
+
+**Importierte Gebiete kommen aus der eigenen Datenbank.** Gefüllt aus freien
+[Geofabrik](https://download.geofabrik.de)-Auszügen, monatlich aufgefrischt
+(`.github/workflows/ortsdaten.yml`). Dorthin geht keine Anfrage ins fremde
+Netz, und sie kann nicht ausfallen. Details und Messwerte:
+[`infra/osm-import/README.md`](infra/osm-import/README.md).
+
+> **Stand 05.11.2026: noch kein Gebiet importiert.** Der Weg ist gebaut und
+> geprüft, aber der erste Lauf braucht das Geheimnis `DATABASE_URL` im
+> Repository (Settings → Secrets and variables → Actions). Bis dahin läuft
+> alles über Overpass, wie vorher. `/api/health` zeigt unter `ortsdaten`,
+> was wirklich drin liegt — diese Zeile ist die Wahrheit, nicht dieser Text.
+
+Für alles andere bleibt **Overpass** der Weg – mit Zwischenspeicher,
+Notfallspeicher und ehrlicher Absage bei Ausfall.
+
+Der Anlass für die eigene Datenbank: Vom 20.10. bis 05.11.2026 – sechzehn
+Tage – waren alle drei öffentlichen Overpass-Instanzen ununterbrochen im
+Zeitlimit, von Vercel aus nachgemessen.
+Die App konnte in dieser Zeit in jeder kalten Gegend keinen Plan bauen. Das
+ist kein Fehler, den man wegprogrammiert – die Quelle trägt nicht.
+
+`/api/health` weist je Gebiet den Datenstand und das Alter in Tagen aus. Die
+eigene Datenbank ist schnell, aber genau so aktuell wie der letzte Auszug;
+das muss sichtbar sein. `WASJETZT_EIGENE_ORTE=0` schaltet sie ab.
+
 ## Geschwindigkeit
 
 Die öffentlichen Overpass-Instanzen sind gespendete Infrastruktur und schwanken
-stark – dieselbe Abfrage brauchte in Messungen zwischen 4 und 21 Sekunden. Damit
-„⚡ Jetzt los“ trotzdem sofort reagiert:
+stark – dieselbe Abfrage brauchte in Messungen zwischen 4 und 21 Sekunden. Für
+importierte Gebiete spielt das keine Rolle mehr. Damit „⚡ Jetzt los“ auch
+sonst sofort reagiert:
 
 1. **Vorladen.** Sobald der Standort bekannt ist, lädt die Startseite die Umgebung
    im Hintergrund (`/api/prefetch`) – während der Nutzer noch die Überschrift liest.
@@ -115,9 +143,11 @@ components/     UI, nach Bereich gruppiert
 engine/         Plan Engine – kennt keine API, nur Daten
 providers/      Austauschbare Datenquellen hinter Interfaces
   osm/          Overpass-Abfrage, Tag-Mapping, opening_hours-Parser
+                osmToPlace.ts: Tags -> Ort, für BEIDE Quellen dieselbe Stelle
   routing/      OSRM (echt) mit geometrischer Schätzung als Rückfall
   mock/         Demo-Generator (Fallback)
-db/             PlanStore: In-Memory und Prisma/Postgres
+db/             PlanStore und eigene Ortsdatenbank (Prisma/Postgres)
+infra/osm-import/ Geofabrik-Auszüge holen, lesen, importieren
 lib/            Zeit, Geo, i18n, Client-Speicher, Validierung
 types/          Domänenmodell
 hooks/          Standort, Wetter
@@ -223,8 +253,11 @@ Engine-Texte (`engine/narrative.ts`) sind noch deutsch fest verdrahtet.
 1. **Eigener Tile-Server oder bezahlter Anbieter** – der OSM-Tileserver ist für
    moderate Nutzung gedacht, nicht für Produktionslast (`NEXT_PUBLIC_TILE_URL`).
 2. **Straßengenaue Linie** – OSRM liefert auf Wunsch die Geometrie mit.
-3. **Eigene Overpass-Instanz oder Vorimport** – macht die App unabhängig von der
-   Auslastung öffentlicher Server.
+3. **Vorimport statt eigener Overpass-Instanz** – gebaut und geprüft am
+   05.11.2026, aber noch nicht gelaufen: Es fehlt das Geheimnis
+   `DATABASE_URL` im Repository. Danach sind Berlin und Brandenburg ein
+   Workflow-Klick, weitere Gebiete ein Eintrag in der Eingabe. Eine eigene
+   Overpass-Instanz (~4 €/Monat) wird damit nicht mehr nötig.
 4. **Engine-Texte übersetzen** und die vier vorbereiteten Sprachen befüllen.
 5. **Events** – `EventProvider` gegen eine echte Ticket-/Event-API.
 6. **Buchungen** – `BookingProvider` implementieren, „Buchen“ pro Schritt.

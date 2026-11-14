@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProviders } from '@/providers/registry';
+import { bremse, REGELN } from '@/lib/ratenbremse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,9 @@ export const maxDuration = 60;
  * Die Antwort kommt sofort; geladen wird im Hintergrund.
  */
 export async function POST(request: Request) {
+  const gebremst = bremse(request, 'prefetch', REGELN.nachschlagen);
+  if (gebremst) return gebremst;
+
   let body: Record<string, unknown> = {};
   try {
     body = (await request.json()) as Record<string, unknown>;

@@ -1,4 +1,6 @@
 import { PrismaPlaceCache } from '@/db/prismaPlaceCache';
+import { PostgresPlaceProvider } from '@/db/postgresPlaceProvider';
+import { EigeneOrteZuerstProvider } from './eigeneOrteZuerstProvider';
 import { FallbackPlaceProvider } from './fallbackPlaceProvider';
 import { InMemoryPlaceCache, LayeredPlaceCache, type PlaceCacheStore } from './placeCache';
 import { MockEventProvider } from './mock/mockEventProvider';
@@ -81,18 +83,47 @@ export function istDatenAusfall(error: unknown): boolean {
   return error instanceof Error && error.name === 'OverpassUnavailableError';
 }
 
+/**
+ * Soll die eigene Ortsdatenbank benutzt werden?
+ *
+ * Sie steht vor Overpass und beantwortet importierte Gebiete ohne fremdes
+ * Netz. Ohne `DATABASE_URL` geht es nicht, und `WASJETZT_EIGENE_ORTE=0`
+ * schaltet sie ab - nützlich, um die Overpass-Wege zu prüfen, ohne die
+ * Datenbank zu leeren.
+ */
+export function eigeneOrteErlaubt(): boolean {
+  if (process.env.WASJETZT_EIGENE_ORTE === '0') return false;
+  return Boolean(process.env.DATABASE_URL);
+}
+
+/** Die Ortsquelle, wie sie `/api/health` ausweist. */
+export function ortsquelleName(): string {
+  const teile: string[] = [];
+  if (eigeneOrteErlaubt()) teile.push('eigene-datenbank');
+  teile.push('overpass');
+  if (demoOrteErlaubt()) teile.push('demo');
+  return teile.join('+');
+}
+
 export function getProviders(): ProviderSet {
   if (!globalForProviders.__wasjetztProviders) {
+    // Overpass mit Zwischenspeicher und Notfallspeicher - bisher der
+    // einzige Weg zu echten Orten, jetzt der zweite.
+    const overpass: PlaceProvider = demoOrteErlaubt()
+      ? new FallbackPlaceProvider(
+          new OverpassPlaceProvider(placeCache()),
+          new MockPlaceProvider(),
+        )
+      : new OverpassPlaceProvider(placeCache());
+
     globalForProviders.__wasjetztProviders = {
-      // Echte Orte aus OpenStreetMap. In Produktion gibt es dahinter nichts:
-      // Fällt Overpass aus, bekommt der Nutzer eine Fehlmeldung, keinen Plan
-      // aus Demo-Orten.
-      places: demoOrteErlaubt()
-        ? new FallbackPlaceProvider(
-            new OverpassPlaceProvider(placeCache()),
-            new MockPlaceProvider(),
-          )
-        : new OverpassPlaceProvider(placeCache()),
+      // Erst die eigene Datenbank, dann OpenStreetMap. In Produktion gibt
+      // es hinter Overpass nichts: Fällt es aus und liegt die Gegend nicht
+      // in der eigenen Datenbank, bekommt der Nutzer eine Fehlmeldung,
+      // keinen Plan aus Demo-Orten.
+      places: eigeneOrteErlaubt()
+        ? new EigeneOrteZuerstProvider(new PostgresPlaceProvider(), overpass)
+        : overpass,
       events: new MockEventProvider(),
       weather: new OpenMeteoWeatherProvider(),
       // Echtes Routing für Fuß/Rad/Auto; ÖPNV und Ausfälle fallen auf die

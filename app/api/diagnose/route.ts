@@ -6,6 +6,7 @@ import { normalizePlanRequest, normalizePreferences, RequestError } from '@/lib/
 import { getProviders } from '@/providers/registry';
 import { haversineMeters } from '@/lib/geo';
 import { passesHardFilters } from '@/engine/hardFilters';
+import { bremse, REGELN } from '@/lib/ratenbremse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,9 @@ export const maxDuration = 60;
  * Bewusst ohne Nebenwirkung: Es wird nichts gespeichert und kein Plan gebaut.
  */
 export async function POST(request: Request) {
+  const gebremst = bremse(request, 'diagnose', REGELN.planen);
+  if (gebremst) return gebremst;
+
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;

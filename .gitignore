@@ -12,3 +12,6 @@ infra/**/.env
 next-env.d.ts
 .DS_Store
 npm-debug.log*
+
+# Heruntergeladene OpenStreetMap-Auszüge (hunderte MB, jederzeit neu ladbar)
+.osm/

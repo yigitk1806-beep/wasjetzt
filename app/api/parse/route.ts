@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getProviders } from '@/providers/registry';
+import { bremse, REGELN } from '@/lib/ratenbremse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** Übersetzt Freitext in Planparameter – für die Live-Vorschau im Formular. */
 export async function POST(request: Request) {
+  const gebremst = bremse(request, 'parse', REGELN.nachschlagen);
+  if (gebremst) return gebremst;
+
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;

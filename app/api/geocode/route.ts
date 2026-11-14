@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProviders } from '@/providers/registry';
+import { bremse, REGELN } from '@/lib/ratenbremse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,6 +11,9 @@ export const dynamic = 'force-dynamic';
  * vorn. Mit `reverse=1` wird zu einem Punkt auf der Karte der Name gesucht.
  */
 export async function GET(request: Request) {
+  const gebremst = bremse(request, 'geocode', REGELN.nachschlagen);
+  if (gebremst) return gebremst;
+
   const { searchParams } = new URL(request.url);
   const query = (searchParams.get('q') ?? '').slice(0, 120);
   const locale = (searchParams.get('locale') ?? 'de').slice(0, 5);

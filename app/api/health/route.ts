@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getPlanStore, isPersistent } from '@/db/planStore';
 import { PrismaPlaceCache } from '@/db/prismaPlaceCache';
-import { getProviders } from '@/providers/registry';
+import { eigeneOrteErlaubt, getProviders, ortsquelleName } from '@/providers/registry';
+import { ortsdatenStand } from '@/db/postgresPlaceProvider';
 import { probeOverpass } from '@/providers/osm/overpassEndpoints';
 import { shortId } from '@/lib/id';
 import type { Plan } from '@/types/domain';
@@ -22,11 +23,29 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   const checks: Record<string, unknown> = {
     databaseUrlGesetzt: isPersistent(),
-    ortsquelle: getProviders().places.id,
+    ortsquelle: ortsquelleName(),
     // Welcher Stand läuft gerade? Ohne das ist von außen nicht zu erkennen,
     // ob ein Deployment schon durch ist.
     version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'lokal',
   };
+
+  // Wie alt sind die eigenen Ortsdaten? Das muss von aussen sichtbar sein:
+  // Die Datenbank antwortet schnell und ohne fremdes Netz, aber sie ist
+  // genau so aktuell wie der letzte Auszug. Ein stillschweigend ein Jahr
+  // alter Bestand waere schlimmer als ein langsamer Server.
+  if (eigeneOrteErlaubt()) {
+    try {
+      const laeufe = await ortsdatenStand();
+      checks.ortsdaten = laeufe.length
+        ? laeufe.map((l) => ({
+            ...l,
+            tageAlt: Number(((Date.now() - new Date(l.datenStand).getTime()) / 86_400_000).toFixed(1)),
+          }))
+        : 'noch kein Gebiet importiert';
+    } catch (error) {
+      checks.ortsdaten = `nicht lesbar (${error instanceof Error ? error.name : 'unbekannt'})`;
+    }
+  }
 
   // Optional: Welche Overpass-Ziele antworten von hier aus? Ohne das ist
   // nicht zu erkennen, ob die eigene Instanz traegt oder ob jede Anfrage

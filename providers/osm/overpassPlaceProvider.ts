@@ -1,21 +1,17 @@
+import { WASJETZT_USER_AGENT } from '@/lib/kennung';
 import { haversineMeters } from '@/lib/geo';
-import { profileFor } from '@/providers/activityProfiles';
+import { dedupe, toPlace, toSight, type OverpassElement } from './osmToPlace';
 import { InMemoryPlaceCache, type PlaceCacheStore } from '@/providers/placeCache';
 import type { PlaceProvider, PlaceQuery } from '@/providers/types';
-import type { Place, PriceInfo, PriceLevel } from '@/types/domain';
-import { parseOpeningHours } from './openingHours';
-import { buildOverpassQuery, classify, istGluecksspiel, type OsmTags } from './taxonomy';
+import type { Place } from '@/types/domain';
+import { buildOverpassQuery, type OsmTags } from './taxonomy';
 import { hostVon, overpassZiele, type OverpassZiel } from './overpassEndpoints';
-import { buildSightsQuery, classifySight, isNotable, sightProfile, themesFor } from './sights';
+import { buildSightsQuery } from './sights';
 
-type OverpassElement = {
-  type: 'node' | 'way' | 'relation';
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: OsmTags;
-};
+// Die Umwandlung von Tags in einen Ort liegt in `osmToPlace.ts` - sie wird
+// von der eigenen Ortsdatenbank genauso gebraucht wie hier. Weiterhin von
+// hier aus sichtbar, damit bestehende Importe gueltig bleiben.
+export { dedupe, toPlace, toSight, type OverpassElement } from './osmToPlace';
 
 type OverpassResponse = { elements?: OverpassElement[] };
 
@@ -90,12 +86,42 @@ const CACHE_VERSION = 'v11';
 const ZELLE_NAH = 0.005;
 const ZELLE_WEIT = 0.02;
 /**
+ * Eine Frist in Millisekunden, umstellbar ueber die Umgebung.
+ *
+ * Der Standard gilt im Betrieb; die Variable gibt es, damit ein Test eine
+ * Kachel altern lassen kann, ohne einen Tag zu warten - und damit sich die
+ * Haltbarkeit im Betrieb notfalls ohne Neubau aendern laesst. Unsinnige
+ * Werte werden ignoriert statt uebernommen.
+ */
+function frist(name: string, standard: number): number {
+  const roh = Number(process.env[name]);
+  return Number.isFinite(roh) && roh > 0 ? roh : standard;
+}
+
+/**
  * Wie lange eine geladene Kachel gilt. Großzügig, weil sich die Orte einer
  * Gegend kaum ändern – und weil Öffnungszeiten ohnehin erst beim Planen gegen
  * die aktuelle Uhrzeit geprüft werden, nicht beim Laden. Mit einer kurzen
  * Frist würde praktisch jeder erste Besucher des Tages auf Overpass warten.
  */
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const CACHE_TTL_MS = frist('WASJETZT_CACHE_TTL_MS', 24 * 60 * 60 * 1000);
+
+/**
+ * Wie alt eine Kachel im Notfall sein darf.
+ *
+ * Antwortet OpenStreetMap gar nicht, ist die Wahl nicht "frische Daten oder
+ * alte Daten", sondern "alte Daten oder kein Plan". Ein Restaurant, das vor
+ * drei Wochen an dieser Ecke stand, steht mit sehr hoher Wahrscheinlichkeit
+ * immer noch dort - und falls nicht, ist ein Vorschlag, der danebenliegt,
+ * immer noch besser als eine Fehlermeldung.
+ *
+ * Die Orte sind dabei echt, nur womoeglich veraltet. Sie werden mit `stale`
+ * gekennzeichnet, und der Plan sagt es dem Nutzer. Erfunden wird nichts.
+ *
+ * Der Wert muss zum Aufraeumen in `prismaPlaceCache.ts` passen: Was dort
+ * geloescht wird, kann hier nicht mehr helfen.
+ */
+const NOTFALL_TTL_MS = frist('WASJETZT_NOTFALL_TTL_MS', 30 * 24 * 60 * 60 * 1000);
 
 /** Erster Endpunkt bekommt mehr Zeit; die Ersatzinstanzen sollen nicht bremsen. */
 
@@ -315,10 +341,16 @@ export class OverpassPlaceProvider implements PlaceProvider {
     const cell = `${CACHE_VERSION}:${Math.round(radius)}:${cellLat.toFixed(3)}:${cellLon.toFixed(3)}`;
     const key = theme === 'sights' ? `sights:${cell}` : cell;
 
-    // Kürzlich gescheitert? Dann nicht erneut minutenlang warten.
+    // Kürzlich gescheitert? Dann nicht erneut minutenlang warten - aber auch
+    // nicht einfach aufgeben: Waehrend eines Ausfalls laeuft fast jede
+    // Anfrage hier vorbei, und ohne diesen Umweg bliebe der Notfallspeicher
+    // ungenutzt. Genau der Fall, fuer den er gedacht ist.
     const letzterFehler = this.gescheitert.get(key);
     if (letzterFehler !== undefined && Date.now() - letzterFehler < FEHLER_PAUSE_MS) {
-      return Promise.reject(new OverpassUnavailableError(`${key}: kürzlich gescheitert`));
+      return this.notfallAusSpeicher(key).then((alt) => {
+        if (alt) return alt;
+        throw new OverpassUnavailableError(`${key}: kürzlich gescheitert`);
+      });
     }
 
     // Parallele Anfragen auf dieselbe Zelle teilen sich einen Vorgang.
@@ -345,6 +377,27 @@ export class OverpassPlaceProvider implements PlaceProvider {
     return request;
   }
 
+  /**
+   * Letzter Ausweg, wenn OpenStreetMap nicht antwortet: eine abgelaufene
+   * Kachel aus dem Zwischenspeicher.
+   *
+   * Die Wahl ist hier nicht "frisch oder alt", sondern "alt oder kein Plan".
+   * Die Orte sind echt - sie werden nur mit `stale` gekennzeichnet, damit
+   * der Plan es dem Nutzer sagen kann. Erfunden wird nichts: Gibt der
+   * Speicher nichts her, bleibt es beim Fehler.
+   *
+   * Die harten Filter laufen danach unveraendert ueber diese Orte, also
+   * greifen Jugendschutz und Gluecksspielsperre genauso wie bei frischen
+   * Daten - `gambling` steht im gespeicherten Ort drin, und der Schluessel
+   * traegt die CACHE_VERSION, unter der er geschrieben wurde.
+   */
+  private async notfallAusSpeicher(key: string): Promise<Place[] | null> {
+    const alt = await this.cache.get(key, NOTFALL_TTL_MS, { uebernehmen: false });
+    if (!alt?.length) return null;
+    console.warn(`[overpass] ${key}: nicht erreichbar, nutze Zwischenspeicher`);
+    return alt.map((place) => ({ ...place, stale: true }));
+  }
+
   private async loadCell(
     key: string,
     lat: number,
@@ -355,9 +408,15 @@ export class OverpassPlaceProvider implements PlaceProvider {
     const cached = await this.cache.get(key, CACHE_TTL_MS);
     if (cached) return cached;
 
-    const places = await this.fetchCell(lat, lon, theme, radius);
-    await this.cache.set(key, places);
-    return places;
+    try {
+      const places = await this.fetchCell(lat, lon, theme, radius);
+      await this.cache.set(key, places);
+      return places;
+    } catch (fehler) {
+      const alt = await this.notfallAusSpeicher(key);
+      if (alt) return alt;
+      throw fehler;
+    }
   }
 
   private async fetchCell(
@@ -396,7 +455,7 @@ export class OverpassPlaceProvider implements PlaceProvider {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             // Overpass bittet um eine identifizierbare Anwendung.
-            'User-Agent': 'WasJetzt/0.1 (Freizeitplaner; +https://wasjetzt.app)',
+            'User-Agent': WASJETZT_USER_AGENT,
           },
           body: `data=${encodeURIComponent(query)}`,
           signal: AbortSignal.timeout(ziel.timeoutMs),
@@ -466,207 +525,4 @@ export class OverpassUnavailableError extends Error {
     super(`Overpass nicht erreichbar: ${detail}`);
     this.name = 'OverpassUnavailableError';
   }
-}
-
-function toPlace(element: OverpassElement): Place | null {
-  const tags = element.tags;
-  if (!tags?.name) return null;
-
-  const lat = element.lat ?? element.center?.lat;
-  const lon = element.lon ?? element.center?.lon;
-  if (lat === undefined || lon === undefined) return null;
-
-  const profileKey = classify(tags);
-  if (!profileKey) return null;
-  const profile = profileFor(profileKey);
-
-  // Dauerhaft geschlossene oder geplante Objekte überspringen.
-  if (tags['disused:amenity'] || tags.abandoned || tags.construction) return null;
-  if (tags.access === 'private' || tags.access === 'no') return null;
-
-  return {
-    id: `osm_${element.type[0]}${element.id}`,
-    name: tags.name,
-    category: profile.category,
-    kind: profile.kind,
-    emoji: profile.emoji,
-    location: { lat, lon, address: addressOf(tags) },
-    price: priceOf(tags, profile.priceLevel),
-    typicalDurationMin: profile.typicalDurationMin,
-    openingHours: parseOpeningHours(tags.opening_hours),
-    indoorOutdoor: profile.indoorOutdoor,
-    rainSuitability: profile.rainSuitability,
-    heatSuitability: profile.heatSuitability,
-    coldSuitability: profile.coldSuitability,
-    bestSeasons: profile.bestSeasons,
-    scores: { ...profile.scores },
-    // OSM kennt keine Bewertungen – also gibt es hier auch keine.
-    source: 'openstreetmap',
-    // Für die Tourplanung: Orte ohne Wikipedia-Artikel werden zu Geheimtipps.
-    notable: isNotable(tags),
-    sightseeing: profile.sightseeing,
-    // Profil ODER Tags: Ein Ort kann über ein harmloses Zweit-Tag in die
-    // Abfrage geraten und trotzdem eine Spielhalle sein.
-    gambling: profile.gambling || istGluecksspiel(tags),
-    minAge: minAgeOf(tags, profile.minAge),
-    bookable: profile.bookable,
-  };
-}
-
-/**
- * Eine Sehenswürdigkeit aus OSM. Dieselben Regeln wie bei Ausgehorten:
- * Öffnungszeiten und Preise nur, wenn OSM sie liefert – sonst ehrlich leer.
- */
-function toSight(element: OverpassElement): Place | null {
-  const tags = element.tags;
-  if (!tags?.name) return null;
-
-  const lat = element.lat ?? element.center?.lat;
-  const lon = element.lon ?? element.center?.lon;
-  if (lat === undefined || lon === undefined) return null;
-
-  const key = classifySight(tags);
-  if (!key) return null;
-  if (tags['disused:tourism'] || tags.abandoned || tags.access === 'private') return null;
-
-  const profile = sightProfile(key);
-  const notable = isNotable(tags);
-
-  // Die meisten Denkmäler, Brücken und Aussichtspunkte kosten nichts; Museen,
-  // Schlösser, Türme und Attraktionen (Miniatur Wunderland, Fernsehturm …)
-  // meist etwas. Das ist eine Schätzung und wird so ausgewiesen.
-  const kostetMeist = ['museum', 'castle', 'palace', 'zoo', 'ship', 'tower', 'attraction'];
-  const fallbackLevel = kostetMeist.includes(key) ? 1 : 0;
-
-  return {
-    id: `osm_${element.type[0]}${element.id}`,
-    name: tags.name,
-    category: profile.category,
-    kind: profile.kind,
-    emoji: profile.emoji,
-    location: { lat, lon, address: addressOf(tags) },
-    price: priceOf(tags, fallbackLevel),
-    typicalDurationMin: profile.dwellMin,
-    openingHours: parseOpeningHours(tags.opening_hours),
-    indoorOutdoor: profile.indoorOutdoor,
-    rainSuitability: profile.indoorOutdoor === 'indoor' ? 1 : profile.indoorOutdoor === 'mixed' ? 0.6 : 0.15,
-    heatSuitability: profile.indoorOutdoor === 'indoor' ? 0.95 : 0.7,
-    coldSuitability: profile.indoorOutdoor === 'indoor' ? 1 : 0.45,
-    bestSeasons: [],
-    scores: {
-      romantic: profile.themes.includes('photo') ? 0.8 : 0.5,
-      action: 0.2,
-      family: 0.7,
-      chill: profile.themes.includes('park') ? 0.9 : 0.6,
-      // Unbekanntes ist neuer als das, was jeder schon gesehen hat.
-      novelty: notable ? 0.5 : 0.85,
-      social: 0.5,
-    },
-    source: 'openstreetmap',
-    themes: themesFor(key, tags),
-    notable,
-    // Auch eine Sehenswürdigkeit kann eine Spielbank sein: Berühmte Häuser
-    // tragen in OSM oft `tourism=attraction` neben `amenity=casino`. Ohne
-    // dieses Kennzeichen käme so ein Ort über die Tour herein.
-    gambling: istGluecksspiel(tags) || undefined,
-    wikipedia: wikipediaOf(tags),
-    prominence: prominenceOf(tags),
-  };
-}
-
-/**
- * Bekanntheit aus echten Daten: In wie vielen Sprachen gibt es einen Namen
- * oder Wikipedia-Artikel? Weltbekannte Orte haben Dutzende, lokale kaum welche.
- */
-function prominenceOf(tags: OsmTags): number {
-  let sprachen = 0;
-  for (const key of Object.keys(tags)) {
-    if (/^(name|wikipedia):[a-z]{2,3}(-[A-Za-z]+)?$/.test(key)) sprachen += 1;
-  }
-  return Math.min(1, sprachen / 25);
-}
-
-/** "de:Brandenburger Tor" – bevorzugt der Haupteintrag, sonst ein Sprach-Tag. */
-function wikipediaOf(tags: OsmTags): string | undefined {
-  if (tags.wikipedia?.includes(':')) return tags.wikipedia;
-  if (tags['wikipedia:de']) return `de:${tags['wikipedia:de']}`;
-  const sprach = Object.keys(tags).find((k) => k.startsWith('wikipedia:'));
-  return sprach ? `${sprach.slice('wikipedia:'.length)}:${tags[sprach]}` : undefined;
-}
-
-/** Preis: echter Betrag nur, wenn OSM ihn wirklich angibt. */
-function priceOf(tags: OsmTags, fallbackLevel: PriceLevel): PriceInfo {
-  if (tags.fee === 'no' || tags['fee:conditional']?.startsWith('no')) {
-    return { level: 0, levelEstimated: false };
-  }
-
-  const charge = parseCharge(tags.charge ?? tags['fee:amount']);
-  if (charge !== null) {
-    return {
-      level: levelFromAmount(charge),
-      levelEstimated: false,
-      perPerson: { min: charge, max: charge },
-    };
-  }
-
-  return { level: fallbackLevel, levelEstimated: true };
-}
-
-/** Versteht nur eindeutige Angaben wie "5 EUR" oder "7.50 EUR". */
-function parseCharge(value: string | undefined): number | null {
-  if (!value) return null;
-  const match = value.trim().match(/^(\d{1,4})(?:[.,](\d{1,2}))?\s*(eur|€)$/i);
-  if (!match) return null;
-  const amount = Number(`${match[1]}.${match[2] ?? '0'}`);
-  return Number.isFinite(amount) ? amount : null;
-}
-
-function levelFromAmount(amount: number): PriceLevel {
-  if (amount === 0) return 0;
-  if (amount <= 12) return 1;
-  if (amount <= 30) return 2;
-  return 3;
-}
-
-function minAgeOf(tags: OsmTags, fallback: number | undefined): number | undefined {
-  const raw = tags['min_age'] ?? tags['age:min'];
-  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function addressOf(tags: OsmTags): string | undefined {
-  const street = tags['addr:street'];
-  if (!street) return undefined;
-  const number = tags['addr:housenumber'];
-  const strasse = number ? `${street} ${number}` : street;
-
-  // Postleitzahl und Ort nur, wenn OSM sie wirklich hat – nichts ergänzen.
-  const ort = [tags['addr:postcode'], tags['addr:city']].filter(Boolean).join(' ');
-  return ort ? `${strasse}, ${ort}` : strasse;
-}
-
-/**
- * OSM enthält denselben Betrieb gelegentlich mehrfach (Node + Gebäudefläche).
- * Gleicher Name in derselben ~100-m-Kachel wird zusammengefasst; der Eintrag
- * mit den meisten Angaben gewinnt.
- */
-function dedupe(places: Place[]): Place[] {
-  const byKey = new Map<string, Place>();
-
-  for (const place of places) {
-    const key = [
-      place.name.toLowerCase(),
-      place.location.lat.toFixed(3),
-      place.location.lon.toFixed(3),
-    ].join('|');
-
-    const existing = byKey.get(key);
-    if (!existing) {
-      byKey.set(key, place);
-      continue;
-    }
-    if (!existing.openingHours && place.openingHours) byKey.set(key, place);
-  }
-
-  return [...byKey.values()];
 }

@@ -381,6 +381,13 @@ export function PlanView({ initialPlan }: Props) {
             {t.plan.mockNotice}
           </p>
         ) : null}
+
+        {/* Echte Orte, aber aelterer Stand – das gehoert sichtbar gesagt. */}
+        {plan.containsStaleData ? (
+          <p className="rounded-2xl bg-canvas-sunk px-3.5 py-3 text-[0.76rem] leading-relaxed text-ink-faint">
+            {t.plan.staleNotice}
+          </p>
+        ) : null}
       </main>
 
       {/* Eine Hauptaktion. */}
