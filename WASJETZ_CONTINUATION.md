@@ -1,6 +1,6 @@
 # WasJetzt – Fortsetzung
 
-Stand: 14.11.2026 · Zweig `feat/eigene-ortsdaten` · **gepusht** (Vorschau), nicht auf main · CI „Tests“ grün inkl. Datenbanktest gegen echtes Postgres
+Stand: 14.11.2026 · **live auf main (`fccd5fe`)** · Ortsdaten Berlin + Brandenburg importiert · CI gruen
 
 ## Live-Zustand (gemessen 11.11.2026)
 
@@ -10,8 +10,8 @@ Stand: 14.11.2026 · Zweig `feat/eigene-ortsdaten` · **gepusht** (Vorschau), ni
 
 ## Blockiert – liegt beim Eigentümer
 
-1. Geheimnis `DATABASE_URL` im GitHub-Repository setzen (Settings → Secrets → Actions).
-2. (Push erledigt 14.11.) Actions → „Ortsdaten“ → Run workflow.
+1. ~~Geheimnis `DATABASE_URL`~~ erledigt 14.11.
+2. ~~Import~~ erledigt 14.11., live geprueft (echter Plan ohne Overpass).
 3. Lokale `.env`: Passwort überholt, Neon lehnt ab. Nur nötig für lokale DB-Arbeit.
 4. Impressum und rechtlich geprüfte Datenschutzerklärung fehlen – Pflicht vor öffentlichem Launch in Deutschland. Nicht erfunden, braucht Name/Anschrift und Prüfung.
 
