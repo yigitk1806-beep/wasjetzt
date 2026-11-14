@@ -110,16 +110,23 @@ if (!p) {
   }
 
   console.log('\n### 2 · Geschaetzte Wege geben keine Strasse vor');
-  // Deterministisch statt zufaellig: Fuer den OEPNV hat OSRM kein Profil,
-  // also faellt dort jeder Weg auf die geometrische Schaetzung zurueck.
-  // Auf einen zufaellig gescheiterten Weg zu warten waere kein Test.
+  // GEAENDERT am 14.11.2026, mit Grund: Frueher fiel beim OEPNV JEDER Weg
+  // auf die Schaetzung zurueck, und dieser Fall pruefte das. Seitdem werden
+  // kurze OEPNV-Wege (bis 1,2 km Luftlinie) als echter Fussweg berechnet -
+  // niemand nimmt fuer 600 m die Bahn. Geprueft wird jetzt beides: kurze
+  // Wege sind gelaufen und tragen Strassenfuehrung, alle uebrigen bleiben
+  // ehrlich geschaetzt. Die Regel selbst prueft ohne Netz
+  // infra/tests/oepnv-fussweg.mts.
   const oepnv = await plan({ moods: ['action'], party: 'friends', groupSize: 2, mobility: 'transit' });
   if (!oepnv) {
     chk('Geschaetzte Wege tragen keine erfundene Geometrie', null, 'kein Plan');
   } else {
     const alleWege = oepnv.steps.map((s) => s.travelFromPrevious).filter((l) => l.distanceMeters > 0 || l.durationMin > 0);
+    const gelaufen = alleWege.filter((l) => l.mode === 'walk');
+    chk('Kurze OEPNV-Wege sind gelaufen und tragen Strassenfuehrung',
+      gelaufen.length === 0 ? null : gelaufen.every((l) => !l.estimated && l.geometry),
+      `${gelaufen.length} von ${alleWege.length} gelaufen`);
     const g = alleWege.filter((l) => l.estimated);
-    chk('OEPNV liefert geschaetzte Wege', g.length > 0, `${g.length} von ${alleWege.length}`);
     chk('Geschaetzte Wege tragen keine erfundene Geometrie',
       g.length === 0 ? null : g.every((l) => !l.geometry),
       `davon mit Geometrie: ${g.filter((l) => l.geometry).length}`);

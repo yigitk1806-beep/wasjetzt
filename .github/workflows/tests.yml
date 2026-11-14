@@ -52,6 +52,9 @@ jobs:
       - name: Ratenbremse
         run: node --import ./infra/aliasHaken.mjs --experimental-strip-types infra/tests/ratenbremse.mts
 
+      - name: OePNV-Kurzstrecken werden gelaufen
+        run: node --import ./infra/aliasHaken.mjs --experimental-strip-types infra/tests/oepnv-fussweg.mts
+
       # Der Berlin-Auszug wird eine Woche zwischengespeichert, damit nicht
       # jeder Push 95 MB bei Geofabrik abholt – gespendete Infrastruktur.
       - name: Woche bestimmen
