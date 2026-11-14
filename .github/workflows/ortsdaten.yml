@@ -16,9 +16,9 @@
 #   `--accept-data-loss`: Würde die Änderung Daten verlieren, bricht sie ab,
 #   statt sie zu verwerfen.
 #
-#   Der neue Bestand kommt zuerst vollständig herein, der alte desselben
-#   Gebiets geht erst danach. Die App steht zwischendurch also nie ohne
-#   Daten da.
+#   Alter und neuer Bestand eines Gebiets wechseln in einer Transaktion.
+#   Die App sieht zu keinem Zeitpunkt einen halben oder leeren Bestand, und
+#   scheitert der Lauf, bleibt der alte ganz erhalten.
 #
 # VORAUSSETZUNG: das Geheimnis `DATABASE_URL` in den Repository-Einstellungen
 # (Settings → Secrets and variables → Actions → New repository secret).

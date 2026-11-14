@@ -182,9 +182,8 @@ if (trocken) {
 }
 
 /* ---------------------------------------------------------------- *
- * 5. Schreiben. Der neue Lauf kommt zuerst vollstaendig herein, der
- *    alte geht erst danach - sonst stuende die App zwischendurch ohne
- *    Daten da.
+ * 5. Schreiben. Alter und neuer Lauf wechseln in einer Transaktion -
+ *    die App sieht zu keinem Zeitpunkt einen halben oder leeren Bestand.
  * ---------------------------------------------------------------- */
 const prisma = new PrismaClient();
 const importId = `${gebiet.replace(/\//g, '-')}-${datenStand.toISOString().slice(0, 10)}-${md5.slice(0, 8)}`;
@@ -197,41 +196,61 @@ try {
   }
 
   console.log(`\nSchreibe als ${importId} ...`);
-  await prisma.osmImport.create({
-    data: { id: importId, gebiet, datenStand, md5, orte: saetze.length },
-  });
 
-  const BUENDEL = 2000;
-  let geschrieben = 0;
-  for (let i = 0; i < saetze.length; i += BUENDEL) {
-    const teil = saetze.slice(i, i + BUENDEL);
-    await prisma.osmPlace.createMany({
-      data: teil.map((s) => ({
-        id: s.id,
-        lat: s.lat,
-        lon: s.lon,
-        name: s.name,
-        profil: s.profil,
-        sight: s.sight,
-        gambling: s.gambling,
-        tags: s.tags,
-        importId,
-      })),
-      // Ein Ort kann in zwei Gebieten liegen (Berlin und Brandenburg).
-      // Dann gilt der erste - nicht abbrechen.
-      skipDuplicates: true,
-    });
-    geschrieben += teil.length;
-    process.stdout.write(`\r  ${geschrieben.toLocaleString('de-DE')} von ${saetze.length.toLocaleString('de-DE')}`);
+  // Alles in EINER Transaktion: alten Lauf loeschen, neuen schreiben.
+  //
+  // Die erste Fassung schrieb erst den neuen Lauf mit `skipDuplicates` und
+  // loeschte danach den alten. Das leerte beim zweiten Lauf die Datenbank:
+  // Fast jeder Ort existierte schon unter derselben Kennung, wurde deshalb
+  // uebersprungen, blieb am alten Lauf haengen - und ging mit ihm per
+  // Cascade unter. Uebrig blieb nur, was seit dem letzten Monat neu war.
+  //
+  // In der Transaktion sehen lesende Anfragen bis zum Abschluss den alten
+  // Bestand (Postgres zeigt unfertige Transaktionen nicht). Scheitert
+  // etwas, bleibt der alte Bestand ganz erhalten.
+  const geschrieben = await prisma.$transaction(
+    async (tx) => {
+      const alt = await tx.osmImport.deleteMany({ where: { gebiet } });
+      if (alt.count > 0) console.log(`  ${alt.count} aelteren Lauf/Laeufe desselben Gebiets ersetzt`);
+
+      await tx.osmImport.create({
+        data: { id: importId, gebiet, datenStand, md5, orte: saetze.length },
+      });
+
+      const BUENDEL = 2000;
+      let zahl = 0;
+      for (let i = 0; i < saetze.length; i += BUENDEL) {
+        const teil = saetze.slice(i, i + BUENDEL);
+        const ergebnis = await tx.osmPlace.createMany({
+          data: teil.map((s) => ({
+            id: s.id,
+            lat: s.lat,
+            lon: s.lon,
+            name: s.name,
+            profil: s.profil,
+            sight: s.sight,
+            gambling: s.gambling,
+            tags: s.tags,
+            importId,
+          })),
+          // Ein Weg an der Grenze kann in zwei Auszuegen stehen (Berlin und
+          // Brandenburg). Dann gehoert er dem Gebiet, das zuerst kam.
+          skipDuplicates: true,
+        });
+        zahl += ergebnis.count;
+        process.stdout.write(`\r  ${zahl.toLocaleString('de-DE')} von ${saetze.length.toLocaleString('de-DE')}`);
+      }
+      console.log();
+      return zahl;
+    },
+    // Zehntausende Zeilen brauchen laenger als die Vorgabe von 5 s.
+    { timeout: 10 * 60_000, maxWait: 30_000 },
+  );
+
+  const uebersprungen = saetze.length - geschrieben;
+  if (uebersprungen > 0) {
+    console.log(`  ${uebersprungen} Orte gehoeren schon einem anderen Gebiet (Grenzlage)`);
   }
-  console.log();
-
-  // Alte Laeufe desselben Gebiets aufraeumen - die Orte gehen per
-  // onDelete: Cascade mit.
-  const alt = await prisma.osmImport.deleteMany({
-    where: { gebiet, id: { not: importId } },
-  });
-  if (alt.count > 0) console.log(`  ${alt.count} aelteren Lauf/Laeufe desselben Gebiets entfernt`);
 
   console.log(`\nFertig in ${((Date.now() - t0) / 1000).toFixed(1)} s.`);
 } finally {
