@@ -55,6 +55,9 @@ jobs:
       - name: OePNV-Kurzstrecken werden gelaufen
         run: node --import ./infra/aliasHaken.mjs --experimental-strip-types infra/tests/oepnv-fussweg.mts
 
+      - name: Echte Bus- und Bahnverbindungen
+        run: node --import ./infra/aliasHaken.mjs --experimental-strip-types infra/tests/oepnv-verbindung.mts
+
       # Der Berlin-Auszug wird eine Woche zwischengespeichert, damit nicht
       # jeder Push 95 MB bei Geofabrik abholt – gespendete Infrastruktur.
       - name: Woche bestimmen

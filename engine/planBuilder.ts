@@ -1003,9 +1003,13 @@ export async function refinePlanRouting(
 
   const queries: RouteQuery[] = [];
   let from: Coordinates = ctx.request.origin;
+  // Abfahrt je Weg: Start des Plans bzw. Ende der vorigen Station. OSRM
+  // braucht sie nicht, Bus & Bahn schon – die Verbindung hängt am Fahrplan.
+  let abfahrt = ctx.start.toISOString();
   for (const step of plan.steps) {
-    queries.push({ from, to: step.place.location, mode: ctx.request.mobility });
+    queries.push({ from, to: step.place.location, mode: ctx.request.mobility, departISO: abfahrt });
     from = step.place.location;
+    abfahrt = step.endISO;
   }
   // Mit Heimkehrzeit wird der Rückweg gleich mitgeroutet.
   const mitRueckweg = Boolean(ctx.request.mustBeHomeByISO);
@@ -1014,6 +1018,7 @@ export async function refinePlanRouting(
       from,
       to: ctx.request.homeLocation ?? ctx.request.origin,
       mode: ctx.request.mobility,
+      departISO: abfahrt,
     });
   }
 

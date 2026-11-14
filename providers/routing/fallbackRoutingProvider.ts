@@ -25,10 +25,13 @@ export class FallbackRoutingProvider implements RoutingProvider {
   // infra/tests/oepnv-fussweg.mts kann sie direkt pruefen.
   private readonly primary: RoutingProvider;
   private readonly fallback: RoutingProvider;
+  /** Echte Bus- und Bahnverbindungen, wo es sie gibt (transport.rest). */
+  private readonly oepnv?: RoutingProvider;
 
-  constructor(primary: RoutingProvider, fallback: RoutingProvider) {
+  constructor(primary: RoutingProvider, fallback: RoutingProvider, oepnv?: RoutingProvider) {
     this.primary = primary;
     this.fallback = fallback;
+    this.oepnv = oepnv;
     this.id = `${primary.id}+${fallback.id}`;
   }
 
@@ -46,6 +49,16 @@ export class FallbackRoutingProvider implements RoutingProvider {
         return await this.primary.route({ ...query, mode: 'walk' });
       } catch {
         // Fußweg nicht berechenbar – dann wie bisher geschätzt.
+      }
+    }
+    // Längere ÖPNV-Wege: echte Verbindung mit Linie und Abfahrt. Antwortet
+    // der Dienst nicht oder liegt der Weg außerhalb seines Gebiets, bleibt
+    // es bei der ehrlichen Schätzung darunter.
+    if (query.mode === 'transit' && this.oepnv) {
+      try {
+        return await this.oepnv.route(query);
+      } catch (error) {
+        console.warn(`[routing] ${this.oepnv.id} nicht nutzbar`, error instanceof Error ? error.message : error);
       }
     }
     try {

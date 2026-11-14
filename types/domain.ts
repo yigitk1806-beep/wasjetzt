@@ -263,6 +263,11 @@ export type TravelLeg = {
    * genau die Route, aus der Distanz und Dauer stammen. Fehlt bei Schätzungen.
    */
   geometry?: string;
+  /**
+   * Echte Bus- und Bahnverbindung (transport.rest): Linien in Fahrtreihenfolge,
+   * Einstiegshaltestelle und Abfahrt. Fehlt bei Fußwegen und Schätzungen.
+   */
+  oepnv?: { linien: string[]; einstieg?: string; abfahrtISO?: string };
 };
 
 export type PlanStep = {

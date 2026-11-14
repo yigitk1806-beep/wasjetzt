@@ -272,6 +272,7 @@ export const de = {
     adjust: 'Plan anpassen',
     fine: 'Passt schon',
     departAt: (time: string) => `Los um ${time} ·`,
+    transitFrom: (stop: string, time: string) => `ab ${stop} ${time}`,
     directHere: 'direkt hier',
     homeAt: (time: string, approx: boolean) => `Zuhause ${approx ? 'ca.' : 'um'} ${time}`,
     returnWay: (duration: string, approx: boolean) => `Rückweg ${approx ? 'ca. ' : ''}${duration}`,

@@ -1,0 +1,607 @@
+{
+ "journeys": [
+  {
+   "legs": [
+    {
+     "walking": true,
+     "origin": {
+      "type": "location",
+      "id": "991069690",
+      "latitude": 52.53759,
+      "longitude": 13.386484,
+      "address": "Ackerstraße 66, Berlin-Gesundbrunnen"
+     },
+     "destination": {
+      "type": "stop",
+      "id": "900007150",
+      "name": "Gedenkstätte Berliner Mauer (Berlin)",
+      "location": {
+       "type": "location",
+       "id": "900007150",
+       "latitude": 52.535702,
+       "longitude": 13.390484
+      },
+      "products": {
+       "suburban": false,
+       "subway": false,
+       "tram": true,
+       "bus": true,
+       "ferry": false,
+       "express": false,
+       "regional": false
+      },
+      "ids": {
+       "ifopt": "de:11000:900007150"
+      }
+     },
+     "departure": "2026-11-16T14:02:00+01:00",
+     "plannedDeparture": "2026-11-16T14:02:00+01:00",
+     "arrival": "2026-11-16T14:08:00+01:00",
+     "plannedArrival": "2026-11-16T14:08:00+01:00"
+    },
+    {
+     "line": {
+      "name": "M10"
+     },
+     "origin": {
+      "type": "stop",
+      "id": "900007150",
+      "name": "Gedenkstätte Berliner Mauer (Berlin)",
+      "location": {
+       "type": "location",
+       "id": "900007150",
+       "latitude": 52.535702,
+       "longitude": 13.390484
+      },
+      "products": {
+       "suburban": false,
+       "subway": false,
+       "tram": true,
+       "bus": true,
+       "ferry": false,
+       "express": false,
+       "regional": false
+      },
+      "ids": {
+       "ifopt": "de:11000:900007150"
+      }
+     },
+     "destination": {
+      "type": "stop",
+      "id": "900007110",
+      "name": "U Bernauer Str. (Berlin)",
+      "location": {
+       "type": "location",
+       "id": "900007110",
+       "latitude": 52.537994,
+       "longitude": 13.396229
+      },
+      "products": {
+       "suburban": false,
+       "subway": true,
+       "tram": true,
+       "bus": true,
+       "ferry": false,
+       "express": false,
+       "regional": false
+      },
+      "ids": {
+       "ifopt": "de:11000:900007110"
+      }
+     },
+     "departure": "2026-11-16T14:08:00+01:00",
+     "plannedDeparture": "2026-11-16T14:08:00+01:00",
+     "arrival": "2026-11-16T14:10:00+01:00",
+     "plannedArrival": "2026-11-16T14:10:00+01:00",
+     "polyline": {
+      "type": "FeatureCollection",
+      "features": [
+       {
+        "type": "Feature",
+        "properties": {
+         "type": "stop",
+         "id": "900007150",
+         "name": "Gedenkstätte Berliner Mauer (Berlin)",
+         "location": {
+          "type": "location",
+          "id": "900007150",
+          "latitude": 52.535702,
+          "longitude": 13.390484
+         },
+         "products": {
+          "suburban": false,
+          "subway": false,
+          "tram": true,
+          "bus": true,
+          "ferry": false,
+          "express": false,
+          "regional": false
+         },
+         "ids": {
+          "ifopt": "de:11000:900007150"
+         }
+        },
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.39048,
+          52.5357
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.39102,
+          52.536
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.39341,
+          52.53747
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.39555,
+          52.53808
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {
+         "type": "stop",
+         "id": "900007110",
+         "name": "U Bernauer Str. (Berlin)",
+         "location": {
+          "type": "location",
+          "id": "900007110",
+          "latitude": 52.537994,
+          "longitude": 13.396229
+         },
+         "products": {
+          "suburban": false,
+          "subway": true,
+          "tram": true,
+          "bus": true,
+          "ferry": false,
+          "express": false,
+          "regional": false
+         },
+         "ids": {
+          "ifopt": "de:11000:900007110"
+         }
+        },
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.39623,
+          52.538
+         ]
+        }
+       }
+      ]
+     }
+    },
+    {
+     "walking": true,
+     "origin": {
+      "type": "stop",
+      "id": "900007110",
+      "name": "U Bernauer Str. (Berlin)",
+      "location": {
+       "type": "location",
+       "id": "900007110",
+       "latitude": 52.537994,
+       "longitude": 13.396229
+      },
+      "products": {
+       "suburban": false,
+       "subway": true,
+       "tram": true,
+       "bus": true,
+       "ferry": false,
+       "express": false,
+       "regional": false
+      },
+      "ids": {
+       "ifopt": "de:11000:900007110"
+      }
+     },
+     "destination": {
+      "type": "stop",
+      "id": "900007110",
+      "name": "U Bernauer Str. (Berlin)",
+      "location": {
+       "type": "location",
+       "id": "900007110",
+       "latitude": 52.537994,
+       "longitude": 13.396229
+      },
+      "products": {
+       "suburban": false,
+       "subway": true,
+       "tram": true,
+       "bus": true,
+       "ferry": false,
+       "express": false,
+       "regional": false
+      },
+      "ids": {
+       "ifopt": "de:11000:900007110"
+      }
+     },
+     "departure": "2026-11-16T14:10:00+01:00",
+     "plannedDeparture": "2026-11-16T14:10:00+01:00",
+     "arrival": "2026-11-16T14:10:00+01:00",
+     "plannedArrival": "2026-11-16T14:10:00+01:00"
+    },
+    {
+     "line": {
+      "name": "U8"
+     },
+     "origin": {
+      "type": "stop",
+      "id": "900007110",
+      "name": "U Bernauer Str. (Berlin)",
+      "location": {
+       "type": "location",
+       "id": "900007110",
+       "latitude": 52.537994,
+       "longitude": 13.396229
+      },
+      "products": {
+       "suburban": false,
+       "subway": true,
+       "tram": true,
+       "bus": true,
+       "ferry": false,
+       "express": false,
+       "regional": false
+      },
+      "ids": {
+       "ifopt": "de:11000:900007110"
+      }
+     },
+     "destination": {
+      "type": "stop",
+      "id": "900100003",
+      "name": "S+U Alexanderplatz Bhf (Berlin)",
+      "location": {
+       "type": "location",
+       "id": "900100003",
+       "latitude": 52.521508,
+       "longitude": 13.411267
+      },
+      "products": {
+       "suburban": true,
+       "subway": true,
+       "tram": false,
+       "bus": false,
+       "ferry": false,
+       "express": false,
+       "regional": true
+      },
+      "ids": {
+       "ifopt": "de:11000:900100003"
+      }
+     },
+     "departure": "2026-11-16T14:13:00+01:00",
+     "plannedDeparture": "2026-11-16T14:13:00+01:00",
+     "arrival": "2026-11-16T14:18:00+01:00",
+     "plannedArrival": "2026-11-16T14:18:00+01:00",
+     "polyline": {
+      "type": "FeatureCollection",
+      "features": [
+       {
+        "type": "Feature",
+        "properties": {
+         "type": "stop",
+         "id": "900007110",
+         "name": "U Bernauer Str. (Berlin)",
+         "location": {
+          "type": "location",
+          "id": "900007110",
+          "latitude": 52.537994,
+          "longitude": 13.396229
+         },
+         "products": {
+          "suburban": false,
+          "subway": true,
+          "tram": true,
+          "bus": true,
+          "ferry": false,
+          "express": false,
+          "regional": false
+         },
+         "ids": {
+          "ifopt": "de:11000:900007110"
+         }
+        },
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.39623,
+          52.538
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.39671,
+          52.53729
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.39756,
+          52.53605
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.39893,
+          52.5325
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.4007,
+          52.53035
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.4007,
+          52.53035
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.40325,
+          52.52717
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.40362,
+          52.52618
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.40504,
+          52.52543
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.40504,
+          52.52543
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.40579,
+          52.52508
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.40736,
+          52.52469
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.40872,
+          52.52417
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.40915,
+          52.52372
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.40943,
+          52.5229
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.40965,
+          52.52265
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.41135,
+          52.52192
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.41263,
+          52.52095
+         ]
+        }
+       },
+       {
+        "type": "Feature",
+        "properties": {
+         "type": "stop",
+         "id": "900100003",
+         "name": "S+U Alexanderplatz Bhf (Berlin)",
+         "location": {
+          "type": "location",
+          "id": "900100003",
+          "latitude": 52.521508,
+          "longitude": 13.411267
+         },
+         "products": {
+          "suburban": true,
+          "subway": true,
+          "tram": false,
+          "bus": false,
+          "ferry": false,
+          "express": false,
+          "regional": true
+         },
+         "ids": {
+          "ifopt": "de:11000:900100003"
+         }
+        },
+        "geometry": {
+         "type": "Point",
+         "coordinates": [
+          13.41127,
+          52.52151
+         ]
+        }
+       }
+      ]
+     }
+    },
+    {
+     "walking": true,
+     "origin": {
+      "type": "stop",
+      "id": "900100003",
+      "name": "S+U Alexanderplatz Bhf (Berlin)",
+      "location": {
+       "type": "location",
+       "id": "900100003",
+       "latitude": 52.521508,
+       "longitude": 13.411267
+      },
+      "products": {
+       "suburban": true,
+       "subway": true,
+       "tram": false,
+       "bus": false,
+       "ferry": false,
+       "express": false,
+       "regional": true
+      },
+      "ids": {
+       "ifopt": "de:11000:900100003"
+      }
+     },
+     "destination": {
+      "type": "location",
+      "id": null,
+      "latitude": 52.5219,
+      "longitude": 13.4132,
+      "address": "Ziel"
+     },
+     "departure": "2026-11-16T14:18:00+01:00",
+     "plannedDeparture": "2026-11-16T14:18:00+01:00",
+     "arrival": "2026-11-16T14:21:00+01:00",
+     "plannedArrival": "2026-11-16T14:21:00+01:00"
+    }
+   ]
+  }
+ ]
+}

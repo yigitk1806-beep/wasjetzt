@@ -254,6 +254,7 @@ export const it: Dictionary = {
     adjust: 'Adatta il piano',
     fine: 'Va bene così',
     departAt: (time) => `Partenza alle ${time} ·`,
+    transitFrom: (stop, time) => `da ${stop} ${time}`,
     directHere: 'proprio qui',
     homeAt: (time, approx) => `A casa ${approx ? 'verso le' : 'alle'} ${time}`,
     returnWay: (d, approx) => `Ritorno ${approx ? 'ca. ' : ''}${d}`,

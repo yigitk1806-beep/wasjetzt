@@ -76,6 +76,7 @@ export function PlanTimeline({
               aufbruch={index === 0 && departISO ? formatClock(departISO, 'de', tzOffsetMin) : undefined}
               mode={step.travelFromPrevious.mode}
               leg={step.travelFromPrevious}
+              tzOffsetMin={tzOffsetMin}
             />
           ) : null}
 
@@ -167,14 +168,28 @@ function Weg({
   aufbruch,
   mode,
   leg,
+  tzOffsetMin,
 }: {
   aufbruch?: string;
   mode: Mobility;
-  leg: { durationMin: number; distanceMeters: number; estimated: boolean };
+  leg: Pick<PlanStep['travelFromPrevious'], 'durationMin' | 'distanceMeters' | 'estimated' | 'oepnv'>;
+  tzOffsetMin?: number;
 }) {
   const { t } = useLocale();
+  // Echte Verbindung: welche Linien, wo einsteigen, wann sie fährt.
+  const oepnv = leg.oepnv;
+  const fahrt = oepnv
+    ? [
+        oepnv.linien.join(' → '),
+        oepnv.einstieg && oepnv.abfahrtISO
+          ? t.plan.transitFrom(oepnv.einstieg, formatClock(oepnv.abfahrtISO, 'de', tzOffsetMin))
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : null;
   return (
-    <div className="flex items-center gap-2 py-1.5 pl-[3.75rem] text-[0.76rem] text-ink-faint">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-1.5 pl-[3.75rem] text-[0.76rem] text-ink-faint">
       {aufbruch ? (
         <span className="font-semibold tabular-nums text-ink-muted">
           <span aria-hidden>📍 </span>
@@ -188,6 +203,7 @@ function Weg({
             {leg.estimated ? `${t.common.approx} ` : ''}
             {duration(t, leg.durationMin)} · {distance(t, leg.distanceMeters)}
           </span>
+          {fahrt ? <span className="font-medium text-ink-muted">· {fahrt}</span> : null}
         </>
       ) : (
         <span>{t.plan.directHere}</span>

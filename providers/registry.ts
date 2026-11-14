@@ -2,6 +2,7 @@ import { PrismaPlaceCache } from '@/db/prismaPlaceCache';
 import { PostgresPlaceProvider } from '@/db/postgresPlaceProvider';
 import { EigeneOrteZuerstProvider } from './eigeneOrteZuerstProvider';
 import { FallbackPlaceProvider } from './fallbackPlaceProvider';
+import { OepnvRoutingProvider } from './routing/oepnvRoutingProvider';
 import { InMemoryPlaceCache, LayeredPlaceCache, type PlaceCacheStore } from './placeCache';
 import { MockEventProvider } from './mock/mockEventProvider';
 import { MockPlaceProvider } from './mock/mockPlaceProvider';
@@ -128,10 +129,11 @@ export function getProviders(): ProviderSet {
       weather: new OpenMeteoWeatherProvider(),
       // Echtes Routing für Fuß/Rad/Auto; ÖPNV und Ausfälle fallen auf die
       // geometrische Schätzung zurück.
-      routing: new FallbackRoutingProvider(
-        new OsrmRoutingProvider(),
-        new EstimateRoutingProvider(),
-      ),
+      routing: (() => {
+        const osrm = new OsrmRoutingProvider();
+        // Bus & Bahn über transport.rest; die Fußstücke darin über OSRM.
+        return new FallbackRoutingProvider(osrm, new EstimateRoutingProvider(), new OepnvRoutingProvider(osrm));
+      })(),
       // Städte über Open-Meteo (gutes Ranking nach Einwohnerzahl),
       // Adressen über Photon (echte Hausnummern-Koordinaten).
       geocoding: new CompositeGeocodingProvider(

@@ -254,6 +254,7 @@ export const tr: Dictionary = {
     adjust: 'Planı uyarla',
     fine: 'Böyle kalsın',
     departAt: (time) => `Çıkış ${time} ·`,
+    transitFrom: (stop, time) => `${stop} ${time}`,
     directHere: 'tam burada',
     homeAt: (time, approx) => `Evde ${approx ? 'yaklaşık ' : ''}${time}`,
     returnWay: (d, approx) => `Dönüş ${approx ? 'yakl. ' : ''}${d}`,
