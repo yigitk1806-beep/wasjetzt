@@ -1,13 +1,9 @@
 import type { RouteQuery, RoutingProvider } from '@/providers/types';
 import type { TravelLeg } from '@/types/domain';
-import { haversineMeters } from '@/lib/geo';
+import { haversineMeters, OEPNV_ZU_FUSS_BIS_M } from '@/lib/geo';
 
-/**
- * Bis zu dieser Luftlinie wird ein ÖPNV-Weg gelaufen. 1,2 km sind zu Fuß
- * rund 15 Minuten – mit Weg zur Haltestelle und Warten ist die Bahn auf
- * solchen Strecken kaum schneller.
- */
-export const OEPNV_ZU_FUSS_BIS_M = 1200;
+// Die Grenze steht in lib/geo, weil auch die Zeitschätzung sie kennen muss.
+export { OEPNV_ZU_FUSS_BIS_M };
 
 /**
  * Versucht echtes Routing und fällt pro Weg einzeln auf die geometrische

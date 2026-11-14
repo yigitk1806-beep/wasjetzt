@@ -17,7 +17,12 @@ export function haversineMeters(a: Coordinates, b: Coordinates): number {
 const SPEED_KMH: Record<Mobility, number> = {
   walk: 4.6,
   bike: 14,
-  transit: 18,
+  // Tür zu Tür inklusive Fußweg zur Haltestelle. Vorher 18 km/h plus 6 min –
+  // zu optimistisch: Ackerstraße → Alexanderplatz (2,4 km) schätzte das auf
+  // 17 min, die echte Verbindung (transport.rest, M10 → U8) braucht mit
+  // Warten 21. Eine zu kurze Schätzung ist schlimmer als eine zu lange: Der
+  // echte Weg passt dann nicht in den Zeitplan und bleibt gestrichelt.
+  transit: 15,
   car: 27,
 };
 
@@ -25,7 +30,7 @@ const SPEED_KMH: Record<Mobility, number> = {
 const OVERHEAD_MIN: Record<Mobility, number> = {
   walk: 0,
   bike: 2,
-  transit: 6,
+  transit: 8,
   car: 4,
 };
 
@@ -33,11 +38,23 @@ const OVERHEAD_MIN: Record<Mobility, number> = {
  * Grobe Reisezeit ohne echtes Routing. Der Umwegfaktor bildet ab,
  * dass Luftlinie nie der tatsächlichen Strecke entspricht.
  */
+/**
+ * Bis zu dieser Luftlinie wird ein ÖPNV-Weg gelaufen – niemand nimmt für
+ * 600 m die Bahn. Gilt für die Schätzung hier UND für das Routing
+ * (`FallbackRoutingProvider`). Kannte nur das Routing die Regel, plante die
+ * App mit der kürzeren Bahnzeit, und der echte Fußweg passte hinterher
+ * nicht mehr in die Lücke – er blieb gestrichelt.
+ */
+export const OEPNV_ZU_FUSS_BIS_M = 1200;
+
 export function estimateTravelMinutes(
   distanceMeters: number,
   mode: Mobility,
 ): number {
   if (distanceMeters <= 0) return 0;
+  if (mode === 'transit' && distanceMeters <= OEPNV_ZU_FUSS_BIS_M) {
+    return estimateTravelMinutes(distanceMeters, 'walk');
+  }
   const detourFactor = mode === 'walk' ? 1.25 : 1.35;
   const km = (distanceMeters / 1000) * detourFactor;
   const minutes = (km / SPEED_KMH[mode]) * 60 + OVERHEAD_MIN[mode];
