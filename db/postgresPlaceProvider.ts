@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import {
   dedupe,
   toPlace,
@@ -61,25 +61,31 @@ export class PostgresPlaceProvider implements PlaceProvider {
     const { center, radiusMeters } = query;
     const kasten = umkreisKasten(center, radiusMeters);
 
-    const reihen = await client().osmPlace.findMany({
-      where: {
-        lat: { gte: kasten.latMin, lte: kasten.latMax },
-        lon: { gte: kasten.lonMin, lte: kasten.lonMax },
-        // Die Glücksspielsperre greift hier zum ersten Mal, nicht zum
-        // einzigen Mal: `passesHardFilters` und `tourBuilder` prüfen
-        // weiterhin. Ein Ort, der hier durchfällt, kostet aber schon keine
-        // Bandbreite mehr.
-        gambling: false,
-        // Sehenswürdigkeiten und Ausgehorte sind zwei Bestände mit
-        // Überschneidung: Eine Kirche ist nur das eine, ein Museum beides.
-        // Die Abfrage holt nur, was zum Thema passt.
-        ...(query.theme === 'sights' ? { sight: { not: null } } : { profil: { not: null } }),
-      },
-      select: { id: true, lat: true, lon: true, tags: true },
-      // Großzügig: Die Engine filtert danach noch nach Kategorie, Öffnung
-      // und Entfernung. Zu früh zu knapp zu greifen nimmt ihr die Auswahl.
-      take: 4000,
-    });
+    // Sehenswürdigkeiten und Ausgehorte sind zwei Bestände mit
+    // Überschneidung: Eine Kirche ist nur das eine, ein Museum beides.
+    // Die Abfrage holt nur, was zum Thema passt.
+    const thema = query.theme === 'sights' ? Prisma.sql`"sight" IS NOT NULL` : Prisma.sql`"profil" IS NOT NULL`;
+    // Der Längengrad wird zum Pol hin schmaler – ohne diesen Faktor wären
+    // Orte im Osten und Westen in der Sortierung zu weit entfernt.
+    const breite = Math.cos((center.lat * Math.PI) / 180);
+
+    // Nach Abstand sortiert und erst dann begrenzt. Ohne Sortierung lieferte
+    // Postgres bei großem Umkreis IRGENDWELCHE 4000 von Berlins 18.000 Orten:
+    // Das Café nebenan konnte fehlen, ein Ort neun Kilometer weiter war dabei.
+    const reihen = await client().$queryRaw<Reihe[]>`
+      SELECT "id", "lat", "lon", "tags"
+      FROM "OsmPlace"
+      WHERE "lat" BETWEEN ${kasten.latMin} AND ${kasten.latMax}
+        AND "lon" BETWEEN ${kasten.lonMin} AND ${kasten.lonMax}
+        -- Die Glücksspielsperre greift hier zum ersten Mal, nicht zum
+        -- einzigen Mal: passesHardFilters und tourBuilder prüfen weiter.
+        AND "gambling" = false
+        AND ${thema}
+      ORDER BY power("lat" - ${center.lat}, 2) + power(("lon" - ${center.lon}) * ${breite}, 2)
+      -- Großzügig: Die Engine filtert danach noch nach Kategorie, Öffnung
+      -- und Entfernung. Zu früh zu knapp zu greifen nimmt ihr die Auswahl.
+      LIMIT 4000
+    `;
 
     if (reihen.length === 0) {
       // Nichts im Umkreis – liegt das an der Gegend oder am Datenstand?
@@ -136,21 +142,35 @@ export async function ortsdatenStand(): Promise<
 }
 
 /**
- * Liegt irgendetwas Importiertes in erreichbarer Nähe?
+ * Liegt der Punkt INNERHALB eines importierten Gebiets?
  *
- * 60 km, weil ein Auszug an der Stadtgrenze endet: Wer in Potsdam sucht,
- * soll nicht „kein Gebiet" hören, nur weil der Berlin-Auszug dort aufhört.
+ * Geprüft wird, ob es in allen vier Himmelsrichtungen binnen 15 km
+ * importierte Orte gibt. Ein Punkt mitten im Gebiet hat überall Nachbarn;
+ * ein Punkt draußen vor der Grenze nur auf einer Seite.
+ *
+ * Die erste Fassung fragte nur „irgendetwas im Umkreis von 60 km". Damit
+ * galt Magdeburg als abgedeckt, weil Brandenburg keine 60 km entfernt ist –
+ * und Nutzer dort bekamen „nichts Passendes" statt der Orte von Overpass.
+ *
+ * Die Fehlerrichtungen sind bewusst ungleich: Ein falsches „nicht
+ * abgedeckt" führt nur auf den alten Weg über Overpass und ist harmlos. Ein
+ * falsches „abgedeckt" hieße einen leeren Plan.
  */
 async function gebietAbgedeckt(center: Coordinates): Promise<boolean> {
-  const weit = umkreisKasten(center, 60_000);
-  const zahl = await client().osmPlace.count({
-    where: {
-      lat: { gte: weit.latMin, lte: weit.latMax },
-      lon: { gte: weit.lonMin, lte: weit.lonMax },
-    },
-    take: 1,
-  });
-  return zahl > 0;
+  const k = umkreisKasten(center, 15_000);
+  const [r] = await client().$queryRaw<
+    Array<{ nord: boolean; sued: boolean; ost: boolean; west: boolean }>
+  >`
+    SELECT
+      bool_or("lat" >= ${center.lat}) AS nord,
+      bool_or("lat" <= ${center.lat}) AS sued,
+      bool_or("lon" >= ${center.lon}) AS ost,
+      bool_or("lon" <= ${center.lon}) AS west
+    FROM "OsmPlace"
+    WHERE "lat" BETWEEN ${k.latMin} AND ${k.latMax}
+      AND "lon" BETWEEN ${k.lonMin} AND ${k.lonMax}
+  `;
+  return Boolean(r?.nord && r.sued && r.ost && r.west);
 }
 
 export type Reihe = { id: string; lat: number; lon: number; tags: unknown };
