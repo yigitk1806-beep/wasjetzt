@@ -1,6 +1,6 @@
 # WasJetzt – Fortsetzung
 
-Stand: 14.11.2026 · **live auf main (`fccd5fe`)** · Ortsdaten Berlin + Brandenburg importiert · CI gruen
+Stand: 14.11.2026 · **live `2da7110`** · eigene Ortsdatenbank (Berlin+Brandenburg), echte Fusswege und Bus-/Bahnverbindungen (transport.rest), CI gruen
 
 ## Live-Zustand (gemessen 11.11.2026)
 
