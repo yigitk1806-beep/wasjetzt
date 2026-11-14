@@ -47,6 +47,11 @@ export function PlanMap({ origin, steps, mobility, returnHome, home, originLabel
   const { t } = useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletNS.Map | null>(null);
+  // Wird jeder Weg tatsaechlich gelaufen - etwa weil kurze OePNV-Strecken
+  // als Fussweg berechnet werden -, dann heisst es auch "zu Fuss", und die
+  // Navigation oeffnet den Fussweg statt Bus & Bahn.
+  const wege = steps.map((s) => s.travelFromPrevious).filter((l) => l.distanceMeters > 0);
+  const tatsaechlich: Mobility = wege.length > 0 && wege.every((l) => l.mode === 'walk') ? 'walk' : mobility;
 
   useEffect(() => {
     let cancelled = false;
@@ -185,10 +190,10 @@ export function PlanMap({ origin, steps, mobility, returnHome, home, originLabel
       />
       <div className="flex items-center justify-between gap-2 px-4 py-3">
         <span className="min-w-0 text-[0.78rem] text-ink-muted">
-          {wegText(t, origin, steps, mobility, returnHome)}
+          {wegText(t, origin, steps, tatsaechlich, returnHome)}
         </span>
         <a
-          href={mapsUrl(origin, steps, mobility)}
+          href={mapsUrl(origin, steps, tatsaechlich)}
           target="_blank"
           rel="noopener noreferrer"
           className="tap shrink-0 rounded-xl bg-canvas-sunk px-3 py-1.5 text-[0.78rem] font-semibold text-ink-soft"
