@@ -99,7 +99,16 @@ jobs:
             echo "Es wurde nichts geändert."
             exit 1
           fi
-          echo "Zugang ist gesetzt."
+          # Nur das Format prüfen, nie den Wert ausgeben. Neon bietet beim
+          # Kopieren gern "psql '...'" an - dann fehlt Prisma die Adresse.
+          case "$DATABASE_URL" in
+            postgresql://*|postgres://*) ;;
+            *)
+              echo "::error title=DATABASE_URL hat das falsche Format::Der Wert muss mit postgresql:// beginnen. Vermutlich wurde 'psql' oder ein Anführungszeichen mitkopiert. Bei Neon im Connect-Fenster nur die Zeichenkette kopieren."
+              exit 1
+              ;;
+          esac
+          echo "Zugang ist gesetzt und hat das richtige Format."
 
       - name: Abhängigkeiten installieren
         run: npm ci
@@ -110,7 +119,20 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         # Ohne --accept-data-loss: Eine Änderung, die Daten verlieren würde,
         # bricht hier ab, statt sie stillschweigend zu verwerfen.
-        run: npx prisma db push --skip-generate
+        # Die Meldung landet auch als Hinweis am Lauf - der ist ohne
+        # Anmeldung lesbar, das Protokoll nicht. Adressen werden vorher
+        # unkenntlich gemacht; GitHub schwärzt Geheimnisse zusätzlich.
+        run: |
+          set +e
+          ausgabe="$(npx prisma db push --skip-generate 2>&1)"
+          code=$?
+          sauber="$(printf '%s' "$ausgabe" | sed -E 's#postgres(ql)?://[^ "'"'"']+#postgresql://***#g')"
+          printf '%s\n' "$sauber"
+          if [ $code -ne 0 ]; then
+            kurz="$(printf '%s' "$sauber" | grep -E 'Error|error|P[0-9]{4}|data loss|Warn|warn' | head -8 | tr '\n' ' ')"
+            echo "::error title=prisma db push gescheitert::${kurz:-ohne Meldung, siehe Protokoll}"
+            exit $code
+          fi
 
       - name: Auszüge holen und importieren
         env:
