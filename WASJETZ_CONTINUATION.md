@@ -1,6 +1,6 @@
 # WasJetzt – Fortsetzung
 
-Stand: 11.11.2026 · Zweig `feat/eigene-ortsdaten` · 11 Commits vor `origin/main` · **nicht gepusht, nicht deployt**
+Stand: 14.11.2026 · Zweig `feat/eigene-ortsdaten` · **gepusht** (Vorschau), nicht auf main · CI „Tests“ grün inkl. Datenbanktest gegen echtes Postgres
 
 ## Live-Zustand (gemessen 11.11.2026)
 
@@ -11,7 +11,7 @@ Stand: 11.11.2026 · Zweig `feat/eigene-ortsdaten` · 11 Commits vor `origin/mai
 ## Blockiert – liegt beim Eigentümer
 
 1. Geheimnis `DATABASE_URL` im GitHub-Repository setzen (Settings → Secrets → Actions).
-2. `git push -u origin feat/eigene-ortsdaten`, dann Actions → „Ortsdaten“ → Run workflow.
+2. (Push erledigt 14.11.) Actions → „Ortsdaten“ → Run workflow.
 3. Lokale `.env`: Passwort überholt, Neon lehnt ab. Nur nötig für lokale DB-Arbeit.
 4. Impressum und rechtlich geprüfte Datenschutzerklärung fehlen – Pflicht vor öffentlichem Launch in Deutschland. Nicht erfunden, braucht Name/Anschrift und Prüfung.
 
